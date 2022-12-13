@@ -1,0 +1,9 @@
+{% raw %}
+{{define "partial:footer"}}
+<footer>
+    &copy; {{now | formatTime "2006"}}
+    <br>
+    Version: {{.Version}}
+</footer>
+{{end}}
+{% endraw %}

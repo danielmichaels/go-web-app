@@ -1,0 +1,12 @@
+{
+  "github_username": "danielmichaels",
+  "project_name": "go-web-app",
+  "project_slug": "{{ '-'.join(cookiecutter['project_name'].lower().split()).replace('_', '-') }}",
+  "cmd_name": "app",
+  "project_description": "A chi based web application capable of being driven by templates and APIs",
+  "go_module_path": "github.com/{{ cookiecutter.github_username.strip() }}/{{ cookiecutter.project_name.replace(' ', '-') }}",
+  "go_version": [
+    "1.18",
+    "1.19"
+  ]
+}

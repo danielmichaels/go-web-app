@@ -1,0 +1,30 @@
+{% raw %}
+{{define "page:title"}}Signup{{end}}
+
+{{define "page:main"}}
+<h2>Signup</h2>
+
+<form method="POST" action="/signup" >
+    <input type='hidden' name='csrf_token' value='{{.CSRFToken}}'>
+    
+    {{if .Form.Validator.HasErrors}}
+        <div class="error">Something was wrong. Please correct the errors below and try again.</div>
+    {{end}}
+    <div>
+        <label>Email:</label>
+        {{with .Form.Validator.FieldErrors.Email}}
+            <span class='error'>{{.}}</span>
+        {{end}}
+        <input type="email" name="Email" value="{{.Form.Email}}">
+    </div>
+    <div>
+        <label>Password:</label>
+        {{with .Form.Validator.FieldErrors.Password}}
+            <span class='error'>{{.}}</span>
+        {{end}}
+        <input type="password" name="Password">
+    </div>
+    <button>Signup</button>
+</form>
+{{end}}
+{% endraw %}
