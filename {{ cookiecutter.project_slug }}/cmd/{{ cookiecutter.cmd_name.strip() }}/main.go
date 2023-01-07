@@ -29,14 +29,38 @@ func run() error {
 		logger = logger.With().Caller().Logger()
 	}
 
+// 	db, err := openDB(cfg)
+// 	if err != nil {
+// 		logger.Error().Err(err).Msg("unable to connect to database")
+// 		os.Exit(1)
+// 	}
+
 	app := &server.Application{
 		Config:   cfg,
 		Logger:   logger,
 		RouteDoc: *routeDoc,
+// 		Db:       database.New(db),
 	}
 	err := app.Serve()
 	if err != nil {
 		app.Logger.Error().Err(err).Msg("server failed to start")
 	}
 	return nil
+}
+
+func openDB(cfg *config.Conf) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", cfg.Db.DbName)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Db.DatabaseConnectionContext)
+	defer cancel()
+
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }

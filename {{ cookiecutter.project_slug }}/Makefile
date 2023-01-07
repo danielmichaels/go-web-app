@@ -48,44 +48,44 @@ run/docgen:
 .PHONY: db/migration/up
 db/migration/up: confirm
 	@echo "setting up the database extensions..."
-	goose -dir ./db/migrations sqlite3 ${DATABASE_URL} up
+	goose -dir ./assets/migrations sqlite3 ${DATABASE_URL} up
 
 ## db/migration/down/to version=$1: Roll back migration to $1
 .PHONY: db/migration/down/to
 db/migration/down/to: confirm
 	@echo "rolling back migrations to ${version}"
-	goose -dir ./db/migrations sqlite3 ${DATABASE_URL} down-to ${version}
+	goose -dir ./assets/migrations sqlite3 ${DATABASE_URL} down-to ${version}
 
 ## db/migration/down: drop all migrations
 .PHONY: db/migration/down
 db/migration/down: confirm
 	@echo "rolling back all migrations"
-	goose -dir ./migrations sqlite3 ${DATABASE_URL} down
+	goose -dir ./assets/migrations sqlite3 ${DATABASE_URL} down
 
 ## db/migration/redo: rollback latest migration, then reapply
 .PHONY: db/migration/redo
 db/migration/redo: confirm
 	@echo "rolling back latest migration, then re-applying it; redo"
-	goose -dir ./db/migrations sqlite3 ${DATABASE_URL} redo
+	goose -dir ./assets/migrations sqlite3 ${DATABASE_URL} redo
 
 ## db/migration/create name=$1: Create new migrations with name of $1
 .PHONY: db/migration/create
 db/migration/create: confirm
 	@echo "creating migration files for ${name}"
-	goose -dir ./db/migrations sqlite3 $(DATABASE_URL) create ${name} sql
-	goose -dir ./db/migrations sqlite3 $(DATABASE_URL) fix
+	goose -dir ./assets/migrations sqlite3 $(DATABASE_URL) create ${name} sql
+	goose -dir ./assets/migrations sqlite3 $(DATABASE_URL) fix
 
 ## db/migration/status: Check database migration status
 .PHONY: db/migration/status
 db/migration/status:
 	@echo "checking migration status for ${DATABASE_URL}"
-	goose -dir ./db/migrations sqlite3 ${DATABASE_URL} status
+	goose -dir ./assets/migrations sqlite3 ${DATABASE_URL} status
 
 ## db/migration/reset: Roll back all migrations
 .PHONY: db/migration/reset
 db/migration/reset: confirm
 	@echo "rolling back all migrations on ${DATABASE_URL}"
-	goose -dir ./db/migrations sqlite3 ${DATABASE_URL} reset
+	goose -dir ./assets/migrations sqlite3 ${DATABASE_URL} reset
 
 # ==================================================================================== #
 # BUILD

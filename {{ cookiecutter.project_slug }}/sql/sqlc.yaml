@@ -12,4 +12,3 @@ sql:
         emit_exact_table_names: true
         emit_empty_slices: true
         emit_params_struct_pointers: false
-        sql_package: pgx/v4

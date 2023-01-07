@@ -19,6 +19,7 @@ type Application struct {
 	Logger   zerolog.Logger
 	wg       sync.WaitGroup
 	RouteDoc bool
+// 	Db       *database.Queries
 }
 
 func (app *Application) Serve() error {
