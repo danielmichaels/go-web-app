@@ -30,7 +30,8 @@ go_module_path [github.com/danielmichaels/go-web-app]:
 Select go_version:
 1 - 1.18
 2 - 1.19
-Choose from 1, 2 [1]: 
+3 - 1.20
+Choose from 1, 2, 3 [3]: 
 ```
 
 This will create a directory called `go-web-app` in the current working directory. All upper case

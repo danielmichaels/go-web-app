@@ -4,7 +4,7 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-bin = "./tmp/{{ cookiecutter.cmd_name.strip() }}"
+bin = "./tmp/{{ cookiecutter.cmd_name.strip() }} serve"
 cmd = "go build -o ./tmp/{{ cookiecutter.cmd_name.strip() }} ./cmd/{{ cookiecutter.cmd_name.strip() }}"
 delay = 1000
 exclude_dir = ["node_modules", "tmp", "vendor"]

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -e
+
+DB_NAME=database/data.db
+APP=/usr/bin/app
+APP_SERVE="${APP} serve"
+APP_MIGRATE="${APP} migrate"
+
+echo "litestream database checks commencing..."
+if [[ -f "${DB_NAME}" ]]; then
+  echo "Database already exists, skipping restore"
+else
+  echo "No Database found, restoring from replica if exists"
+  echo "litestream_local_DB_NAME_path: ${LITESTREAM_LOCAL_DB_NAME_PATH}"
+  litestream restore -v -if-replica-exists -o "${DB_NAME}" "${LITESTREAM_LOCAL_DB_NAME_PATH}" || echo "litestream attempted to restore but could not connect to or find the database"
+fi
+
+eval "exec ${APP_MIGRATE}"
+printf "Litestream checks completed.\nStarting app...\n"
+eval "exec litestream replicate -exec ${APP_SERVE}"

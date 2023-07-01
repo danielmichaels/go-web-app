@@ -9,7 +9,7 @@ To run the server:
 ```shell
 air
 # OR
-# make run/development
+# task dev
 ```
 
 ## Requirements
@@ -19,6 +19,7 @@ This expects at least the following:
 - [goose](https://github.com/pressly/goose)
 - [sqlc](https://sqlc.dev)
 - [air](https://github.com/cosmtrek/air)
+- [task](https://taskfile.dev)
 
 The rest will be installed during `go mod tidy`.
 
@@ -27,4 +28,4 @@ The rest will be installed during `go mod tidy`.
 The CSS and JS requires some manual building occasionally.
 
 A `Makefile` helper exists to do both of the following in a single command.
-`make assets` will regenerate new bundles.
+`task assets` will regenerate new bundles.

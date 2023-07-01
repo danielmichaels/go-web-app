@@ -6,9 +6,11 @@
 tmp/
 .env
 bin/
-*.json
 .idea/httpRequests/*
 node_modules
+assets/static/css/theme.css
+assets/static/js/bundle.js
+/database/data.db
 
 # User-specific stuff
 .idea/**/workspace.xml

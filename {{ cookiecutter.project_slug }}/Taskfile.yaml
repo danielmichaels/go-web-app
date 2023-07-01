@@ -1,0 +1,125 @@
+{% raw %}
+version: '3'
+
+dotenv:
+  - .env
+
+
+vars:
+  DATABASE_URL:  "./database/data.db"
+  SERVER_PORT: 9898
+
+tasks:
+  default:
+    desc: display all available tasks
+    cmds:
+      - task --list-all
+    silent: true
+
+  init:
+    desc: run this when generated from cookiecutter
+    cmds:
+      - task: sqlc
+      - task: modtidy
+      - task: assets
+  modtidy:
+    desc: runs go mod tidy
+    cmds:
+      - go mod tidy
+  yarn:
+    desc: Install javascript dependencies
+    cmds:
+      - yarn
+
+  tailwind:
+    desc: Install tailwind dependencies
+    cmds:
+      - yarn tailwind
+
+  alpine:
+    desc: Install Alpine.js dependencies
+    cmds:
+      - yarn alpine
+
+  assets:
+    desc: Run all javascript related tasks in one go
+    cmds:
+      - task: yarn
+      - task: tailwind
+      - task: alpine
+  dev:
+    desc: Run the development server with hot-reloading
+    summary: This is the equiv. of running the `mudmap api` CLI command
+    cmds:
+      - air
+
+  sqlc:
+    desc: Generate models using sqlc
+    env:
+      CGO_ENABLED: 1
+    cmds:
+      - cd sql; sqlc generate
+
+  db:migration:up:
+    desc: Run migrations (all of them)
+    cmds:
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} up
+
+  db:migration:down:
+    desc: Drop all migrations
+    cmds:
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} down
+
+  db:migration:down:to:
+    desc: Run migrations back to a specific version
+    summary: |
+      Rollback to a specific version of the local migrations. Must provide the version
+      as an argument.
+      Example,
+      task db:migration:down:to -- 0001
+    cmds:
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} down-to {{.CLI_ARGS}}
+  db:migration:create:
+    desc: Create a new migration. The migration name is the value after --
+    summary: |
+      Create a new migrations file using the following syntax
+      task db:migration:create -- my-new-migration
+    cmds:
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} create {{.CLI_ARGS}} sql
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} fix
+
+  db:migration:redo:
+    desc: Rollback the latest migration, the reapply
+    cmds:
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} redo
+
+  db:migration:status:
+    desc: Get the migration status of the local sqlite database
+    summary: |
+      Example usage
+      task db:migration:status
+    cmds:
+      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} status
+
+  db:shell:
+    desc: Drop into the `sqlite` shell
+    cmds:
+      - sqlite3 {{.DATABASE_URL}}
+
+  jprq:
+    desc: An NGROK alternative for testing webhooks
+    cmds:
+      - jprq http {{.SERVER_PORT}} --debug
+
+  mailpit:
+    desc: Run the mailpit debug mail server
+    cmds:
+      - |
+        docker run -d \
+        --restart unless-stopped \
+        --name=mailpit \
+        -p 8025:8025 \
+        -p 1025:1025 \
+        axllent/mailpit
+
+{% endraw %}

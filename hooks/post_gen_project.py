@@ -27,17 +27,14 @@ def print_final_instructions():
     how to get your go module working.
     - Move to project directory, and initialize a git repository:
         $ cd {{ cookiecutter.project_name.strip() }} && git init
-    - Run go mod tidy to pull in dependencies:
-        $ go mod tidy
-    - Create node resources (Tailwind and Alpine.js)
-        $ yarn
-        $ make assets
+    - Run the initialiser helper
+        $ task init
     - Check the code works (if you have `air` in your $PATH)
         $ air
         or:
-        $ go run cmd/{{ cookiecutter.cmd_name.strip() }}/main.go
+        $ task dev
         or:
-        $ make run/{{ cookiecutter.cmd_name.strip() }}
+        $ go run cmd/{{ cookiecutter.cmd_name.strip() }}/main.go
     - Upload initial code to git:
         $ git add -a
         $ git commit -m "Initial commit!"
@@ -57,4 +54,4 @@ for runner in runners:
         runner()
     except ValueError as e:
         print(e)
-        exit(-10)
+        exit(-1)
