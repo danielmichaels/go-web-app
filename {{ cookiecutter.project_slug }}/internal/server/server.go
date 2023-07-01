@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
+	"{{ cookiecutter.go_module_path.strip() }}/internal/smtp"
+	"{{ cookiecutter.go_module_path.strip() }}/internal/repository"
 	"github.com/rs/zerolog"
 	"net/http"
 	"os"
@@ -15,11 +17,11 @@ import (
 )
 
 type Application struct {
-	Config   *config.Conf
-	Logger   zerolog.Logger
-	wg       sync.WaitGroup
-	RouteDoc bool
-// 	Db       *database.Queries
+	Config *config.Conf
+	Logger zerolog.Logger
+	wg     sync.WaitGroup
+	Mailer *smtp.Mailer
+	Db     *repository.Queries
 }
 
 func (app *Application) Serve() error {
