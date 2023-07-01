@@ -57,4 +57,4 @@ for runner in runners:
         runner()
     except ValueError as e:
         print(e)
-        exit(-10)
+        exit(-1)
