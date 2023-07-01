@@ -1,3 +1,4 @@
+{% raw %}
 version: "2"
 sql:
   - schema: "../assets/migrations/"
@@ -5,10 +6,11 @@ sql:
     queries: "queries/"
     gen:
       go:
-        package: "database"
-        out: "../internal/database"
+        package: "repository"
+        out: "../internal/repository"
         emit_json_tags: true
-        emit_interface: true
+        emit_interface: false
         emit_exact_table_names: true
         emit_empty_slices: true
         emit_params_struct_pointers: false
+{% endraw %}

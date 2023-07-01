@@ -6,7 +6,8 @@
   "project_description": "A chi based web application capable of being driven by templates and APIs",
   "go_module_path": "github.com/{{ cookiecutter.github_username.strip() }}/{{ cookiecutter.project_name.replace(' ', '-') }}",
   "go_version": [
-    "1.18",
-    "1.19"
+    "1.20",
+    "1.19",
+    "1.18"
   ]
 }
