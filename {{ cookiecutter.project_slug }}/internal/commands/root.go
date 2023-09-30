@@ -8,9 +8,8 @@ import (
 
 func Execute(ctx context.Context) int {
 	rootCmd := &cobra.Command{
-		Use:     "familyhub",
-		Aliases: []string{"fh"},
-		Short:   "The family hub CLI",
+		Use:     "{{ cookiecutter.project_slug }}",
+		Short:   "A description",
 	}
 
 	rootCmd.AddCommand(ServeCmd(ctx))
