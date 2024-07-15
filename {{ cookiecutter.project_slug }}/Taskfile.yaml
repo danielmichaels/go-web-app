@@ -1,4 +1,3 @@
-{% raw %}
 version: '3'
 
 dotenv:
@@ -7,7 +6,8 @@ dotenv:
 
 vars:
   DATABASE_URL:  "./database/data.db"
-  SERVER_PORT: 9898
+  DATABASE_TYPE: "postgres"
+  SERVER_PORT: 9000
 
 tasks:
   default:
@@ -16,59 +16,97 @@ tasks:
       - task --list-all
     silent: true
 
+  serve:
+    desc: Run webserver
+    cmds:
+      - air -c .air.toml -build.bin="./tmp/{{ cookiecutter.cmd_name.strip() }} serve"{%raw%}{{.CLI_ARGS}}{%endraw%}
+
+  workers:
+    desc: Run workers.go
+    cmds:
+      - air -c .air.toml -build.bin="./tmp/{{ cookiecutter.cmd_name.strip() }} workers"{%raw%}{{.CLI_ARGS}}{%endraw%}
+
+  tidy:
+    desc: go mod tidy
+    cmds:
+      - go mod tidy
+
   init:
     desc: run this when generated from cookiecutter
     cmds:
       - task: sqlc
-      - task: modtidy
+      - task: templgen
       - task: assets
-  modtidy:
-    desc: runs go mod tidy
-    cmds:
-      - go mod tidy
-  yarn:
+      - task: tidy
+
+  pnpm:
     desc: Install javascript dependencies
     cmds:
-      - yarn
+      - pnpm install
 
   tailwind:
     desc: Install tailwind dependencies
     cmds:
-      - yarn tailwind
+      - pnpm run tailwind
+
+  audit:
+    desc: Run linters and betteralign
+    cmds:
+      - betteralign -apply ./...
+      - golines -w .
+      - golangci-lint run ./... {%raw%}{{.CLI_ARGS}}{%endraw%}
 
   alpine:
     desc: Install Alpine.js dependencies
     cmds:
-      - yarn alpine
+      - pnpm run alpine
 
   assets:
     desc: Run all javascript related tasks in one go
     cmds:
-      - task: yarn
+      - task: pnpm
       - task: tailwind
       - task: alpine
-  dev:
-    desc: Run the development server with hot-reloading
-    summary: This is the equiv. of running the `mudmap api` CLI command
+
+  watchassets:
+    desc: Watch assets and re-build on change
     cmds:
-      - air
+      - fd . assets | entr task assets
+
+  golines:
+    desc: run golines . -w
+    cmds:
+      - golines . -w --ignore-generated --no-reformat-tags
+
+  templgen:
+    desc: run 'templ generate'
+    cmds:
+      - templ fmt .
+      - templ generate
+
+  templautogen:
+    desc: run 'templ generate' when a .templ file changes
+    cmds:
+      - fd . 'assets/view' | entr task templgen
 
   sqlc:
     desc: Generate models using sqlc
     env:
       CGO_ENABLED: 1
+    dir: sql
     cmds:
-      - cd sql; sqlc generate
+      - env | ag -i cgo
+      - sqlc generate
 
   db:migration:up:
     desc: Run migrations (all of them)
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} up
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}}{%endraw%} up
 
   db:migration:down:
     desc: Drop all migrations
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} down
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}}{%endraw%} down
 
   db:migration:down:to:
     desc: Run migrations back to a specific version
@@ -78,20 +116,20 @@ tasks:
       Example,
       task db:migration:down:to -- 0001
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} down-to {{.CLI_ARGS}}
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}} down-to {{.CLI_ARGS}}{%endraw%}
   db:migration:create:
     desc: Create a new migration. The migration name is the value after --
     summary: |
       Create a new migrations file using the following syntax
       task db:migration:create -- my-new-migration
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} create {{.CLI_ARGS}} sql
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} fix
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}} create {{.CLI_ARGS}} sql{%endraw%}
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}} fix{%endraw%}
 
   db:migration:redo:
     desc: Rollback the latest migration, the reapply
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} redo
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}} redo{%endraw%}
 
   db:migration:status:
     desc: Get the migration status of the local sqlite database
@@ -99,20 +137,16 @@ tasks:
       Example usage
       task db:migration:status
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} status
+      - goose -dir ./assets/migrations {%raw%}{{.DATABASE_TYPE}} {{.DATABASE_URL}} status{%endraw%}
 
+  # todo: only use if sqlite3 db
   db:shell:
     desc: Drop into the `sqlite` shell
     cmds:
-      - sqlite3 {{.DATABASE_URL}}
-
-  jprq:
-    desc: An NGROK alternative for testing webhooks
-    cmds:
-      - jprq http {{.SERVER_PORT}} --debug
+      - sqlite3 {%raw%}{{.DATABASE_URL}}{%endraw%}
 
   mailpit:
-    desc: Run the mailpit debug mail server
+    desc: Run the mailpit debug mail webserver
     cmds:
       - |
         docker run -d \
@@ -121,5 +155,3 @@ tasks:
         -p 8025:8025 \
         -p 1025:1025 \
         axllent/mailpit
-
-{% endraw %}

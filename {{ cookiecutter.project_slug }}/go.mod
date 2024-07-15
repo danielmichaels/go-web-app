@@ -3,13 +3,14 @@ module {{ cookiecutter.go_module_path.strip('/') }}
 go {{ cookiecutter.go_version }}
 
 require (
-	github.com/go-chi/chi/v5 v5.0.7
-	github.com/go-chi/httplog v0.2.5
-	github.com/go-mail/mail/v2 v2.3.0
+	github.com/a-h/templ v0.2.747
+	github.com/alecthomas/kong v0.9.0
+	github.com/alecthomas/kong-yaml v0.2.0
+	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/httplog v0.3.2
+	github.com/go-chi/render v1.0.3
 	github.com/joeshaw/envdecode v0.0.0-20200121155833-099f1fc765bd
 	github.com/rs/zerolog v1.28.0
-	golang.org/x/exp v0.0.0-20221114191408-850992195362
-	golang.org/x/text v0.10.0
 )
 
 require (

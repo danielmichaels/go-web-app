@@ -1,8 +1,7 @@
-FROM debian:bookworm-slim AS litestream
+FROM danielmichaels/ci-toolkit AS toolkit
+FROM debian:bookworm-slim AS litestream_downloader
 
-ARG TARGETPLATFORM
-ARG litestream_version="v0.3.9"
-
+ARG litestream_version="v0.3.13"
 WORKDIR /litestream
 
 RUN set -x && \
@@ -20,51 +19,54 @@ RUN set -x && \
       ARCH="amd64" ; \
     fi && \
     set -u && \
-    litestream_binary_tgz_filename="litestream-${litestream_version}-linux-${ARCH}-static.tar.gz" && \
+    litestream_binary_tgz_filename="litestream-${litestream_version}-linux-${ARCH}.tar.gz" && \
     wget "https://github.com/benbjohnson/litestream/releases/download/${litestream_version}/${litestream_binary_tgz_filename}" && \
     mv "${litestream_binary_tgz_filename}" litestream.tgz
 RUN tar -xvzf litestream.tgz
 
-FROM node:lts-bookworm-slim as node
+FROM node:lts-slim AS node
+COPY --from=toolkit ["/usr/local/bin/task", "/usr/local/bin/task"]
+
+# PNPM is required to build the assets
+RUN corepack enable pnpm
 RUN mkdir -p /build
 WORKDIR /build
-COPY . .
-RUN yarn &&\
-    mkdir -p /build/assets/static/css/ &&\
-    mkdir -p /build/assets/static/js/ &&\
-    yarn tailwind &&\
-    yarn alpine
 
-FROM golang:1.20-bookworm AS builder
+COPY . .
+RUN ["task", "assets"]
+
+FROM golang:1.22-bookworm AS builder
 
 WORKDIR /build
-
 # only copy mod file for better caching
-COPY go.mod go.mod
-RUN go mod download
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
 
-COPY --from=node ["/build/assets/static/css/theme.css", "/build/assets/static/css/theme.css"]
-COPY --from=node ["/build/assets/static/js/bundle.js", "/build/assets/static/js/bundle.js"]
-
-ENV CGO_ENABLED=1 GOOS=linux GOARCH=amd64
+COPY --from=node ["/build/assets/static", "/build/assets/static"]
+COPY --from=toolkit ["/usr/local/bin/templ", "/usr/local/bin/templ"]
+COPY --from=toolkit ["/usr/local/bin/task", "/usr/local/bin/task"]
 
 COPY . .
 
-RUN apt-get install git &&\
+RUN ["task", "templgen"]
+
+RUN apt-get install git -y &&\
     go build  \
     -ldflags="-s -w" \
-    -o app github.com/danielmichaels/familyhub/cmd/app
+    -o app ./cmd/app
 
 FROM debian:bookworm-slim
-
 WORKDIR /app
-COPY --from=builder ["/build/litestream.yml", "/app/litestream.yml"]
-COPY --from=builder ["/build/entrypoint", "/app/entrypoint"]
-#COPY --from=builder ["/build/database/data.db", "/app/database/"]
-COPY --from=builder ["/build/app", "/usr/bin/app"]
-COPY --from=litestream ["/litestream/litestream", "/usr/bin/litestream"]
 
-# ensures that migrations are run using the embedded files
-ENV DOCKER=1
-ENTRYPOINT ["/app/entrypoint"]
-CMD ["app", "serve"]
+COPY --from=toolkit ["/usr/local/bin/goose", "/usr/local/bin/goose"]
+COPY --from=builder ["/build/entrypoint", "/app/entrypoint"]
+COPY --from=builder ["/build/assets/migrations", "/app/migrations"]
+COPY --from=builder ["/build/app", "/usr/bin/app"]
+COPY --from=builder ["/build/litestream.yml", "/etc/litestream.yml"]
+COPY --from=litestream_downloader ["/litestream/litestream", "/usr/bin/litestream"]
+
+RUN mkdir -p data &&\
+    apt-get update && apt-get install ca-certificates curl -y &&\
+    chmod +x /app/entrypoint
+
+ENTRYPOINT ["app/entrypoint"]

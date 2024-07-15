@@ -1,21 +1,44 @@
 #!/bin/bash
 
 set -e
+CMD_ARG=${CMD_ARG:-serve}
+CMD="/usr/bin/app $CMD_ARG"
 
-DB_NAME=database/data.db
-APP=/usr/bin/app
-APP_SERVE="${APP} serve"
-APP_MIGRATE="${APP} migrate"
+is_litestream_enabled() {
+  set +ux
 
-echo "litestream database checks commencing..."
-if [[ -f "${DB_NAME}" ]]; then
-  echo "Database already exists, skipping restore"
+  local IS_ENABLED='false'
+
+  if [[ -n "${LITESTREAM_BUCKET}" ]]; then
+    IS_ENABLED='true';
+  fi
+
+  set -ux
+
+  echo "${IS_ENABLED}"
+}
+
+IS_LITESTREAM_ENABLED="$(is_litestream_enabled)"
+readonly IS_LITESTREAM_ENABLED
+
+if [[ "${IS_LITESTREAM_ENABLED}" == 'true' ]]; then
+  litestream version
+  echo "LITESTREAM_BUCKET=${LITESTREAM_BUCKET}"
+  echo "LITESTREAM_ENDPOINT=${LITESTREAM_ENDPOINT}"
+  echo "LITESTREAM_RETENTION=${LITESTREAM_RETENTION}"
+
+  if [[ -f "$DB_PATH" ]]; then
+    echo "Existing database is $(stat -c %s "${DB_PATH}") bytes"
+  else
+    echo "No existing database found"
+    # Restore database from remote storage.
+    litestream restore -if-replica-exists "${DB_PATH}"
+  fi
+  goose -dir /app/migrations sqlite "$DB_PATH" up
+  # Let Litestream start the webserver as a child process
+  exec litestream replicate -exec "$CMD"
 else
-  echo "No Database found, restoring from replica if exists"
-  echo "litestream_local_DB_NAME_path: ${LITESTREAM_LOCAL_DB_NAME_PATH}"
-  litestream restore -v -if-replica-exists -o "${DB_NAME}" "${LITESTREAM_LOCAL_DB_NAME_PATH}" || echo "litestream attempted to restore but could not connect to or find the database"
+  echo "Starting without litestream"
+  goose -dir /app/migrations sqlite "$DB_PATH" up
+  eval "exec $CMD"
 fi
-
-eval "exec ${APP_MIGRATE}"
-printf "Litestream checks completed.\nStarting app...\n"
-eval "exec litestream replicate -exec ${APP_SERVE}"
