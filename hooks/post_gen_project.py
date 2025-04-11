@@ -10,10 +10,22 @@ def create_env():
     Copy .env.sample to .env automatically after creating the project.
     """
 
-    sample_envfile: str = os.path.join(CWD, ".env.sample")
+    sample_envfile: str = os.path.join(CWD, ".env.example")
     envfile: str = os.path.join(CWD, ".env")
 
     shutil.copyfile(sample_envfile, envfile)
+
+def database_choice():
+    """
+    Create database specific files based on user choice
+    """
+    if "{{ cookiecutter.database_choice }}" == "postgres":
+        shutil.rmtree(os.path.join(CWD, "database"))
+        os.remove(os.path.join(CWD, "litestream.yml"))
+    elif "{{ cookiecutter.database_choice }}" == "sqlite":
+        shutil.rmtree(os.path.join(CWD, "internal/testhelpers"))
+    else:
+        raise ValueError("Invalid database choice")
 
 def print_final_instructions():
     """
@@ -46,6 +58,7 @@ def print_final_instructions():
 
 runners = [
     create_env,
+    database_choice,
     print_final_instructions,
 ]
 

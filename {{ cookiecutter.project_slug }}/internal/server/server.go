@@ -5,55 +5,100 @@ import (
 	"errors"
 	"fmt"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
-	"{{ cookiecutter.go_module_path.strip() }}/internal/smtp"
-	"{{ cookiecutter.go_module_path.strip() }}/internal/repository"
-	"github.com/rs/zerolog"
+	"{{ cookiecutter.go_module_path.strip() }}/internal/store"
+	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
+	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/go-chi/httplog/v2"
 )
 
-type Application struct {
-	Config *config.Conf
-	Logger zerolog.Logger
-	wg     sync.WaitGroup
-	Mailer *smtp.Mailer
-	Db     *repository.Queries
+type Server struct {
+	Conf    *config.Conf
+	Log     *slog.Logger
+	Db      *store.Queries
+	PgxPool *pgxpool.Pool
 }
 
-func (app *Application) Serve() error {
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", app.Config.Server.Port),
-		Handler:      app.routes(),
-		IdleTimeout:  app.Config.Server.TimeoutIdle,
-		ReadTimeout:  app.Config.Server.TimeoutRead,
-		WriteTimeout: app.Config.Server.TimeoutWrite,
+func New(
+	c *config.Conf,
+	l *slog.Logger,
+	{% if cookiecutter.database_choice == "postgres" -%}
+	db *store.Queries,
+	pgxPool *pgxpool.Pool,
+	{% endif %}
+) *Server {
+	return &Server{
+	Conf: c,
+	Log: l,
+	{% if cookiecutter.database_choice == "postgres" -%}
+	Db: db,
+	PgxPool: pgxPool,{% endif -%}
 	}
+}
 
+func httpLogger(cfg *config.Conf) *httplog.Logger {
+	var output io.Writer = os.Stdout
+	logger := httplog.NewLogger("web", httplog.Options{
+		JSON:             cfg.AppConf.LogJson,
+		LogLevel:         cfg.AppConf.LogLevel,
+		Concise:          cfg.AppConf.LogConcise,
+		RequestHeaders:   cfg.AppConf.LogRequestHeaders,
+		ResponseHeaders:  cfg.AppConf.LogResponseHeaders,
+		MessageFieldName: "message",
+		TimeFieldFormat:  time.RFC3339,
+		Tags: map[string]string{
+			"version": version.Get(),
+		},
+		QuietDownRoutes: []string{
+			"/",
+			"/ping",
+			"/healthz",
+		},
+		QuietDownPeriod: 10 * time.Second,
+		Writer:          output,
+	})
+	return logger
+}
+
+func (app *Server) Serve(ctx context.Context) error {
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", app.Conf.Server.Port),
+		Handler:      app.routes(),
+		IdleTimeout:  app.Conf.Server.TimeoutIdle,
+		ReadTimeout:  app.Conf.Server.TimeoutRead,
+		WriteTimeout: app.Conf.Server.TimeoutWrite,
+	}
+	app.Log.Info("HTTP server listening", "port", app.Conf.Server.Port)
+	wg := sync.WaitGroup{}
 	shutdownError := make(chan error)
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		s := <-quit
 
-		app.Logger.Warn().Str("signal", s.String()).Msg("caught signal")
+		app.Log.Warn("signal caught", "signal", s.String())
 
 		// Allow processes to finish with a ten-second window
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		err := srv.Shutdown(ctx)
 		if err != nil {
 			shutdownError <- err
 		}
-		app.Logger.Warn().Str("tasks", srv.Addr).Msg("completing background tasks")
+		app.Log.Warn("web-server", "addr", srv.Addr, "msg", "completing background tasks")
 		// Call wait so that the wait group can decrement to zero.
-		app.wg.Wait()
+		wg.Wait()
 		shutdownError <- nil
 	}()
-	app.Logger.Info().Str("server", srv.Addr).Msg("starting server")
 
 	err := srv.ListenAndServe()
 	if !errors.Is(err, http.ErrServerClosed) {
@@ -61,7 +106,7 @@ func (app *Application) Serve() error {
 	}
 	err = <-shutdownError
 	if err != nil {
-		app.Logger.Warn().Str("server", srv.Addr).Msg("stopped server")
+		app.Log.Warn("web-server shutdown err", "addr", srv.Addr, "msg", "stopped server")
 		return err
 	}
 	return nil

@@ -1,27 +1,23 @@
 package server
 
 import (
-	"{{ cookiecutter.go_module_path.strip() }}/internal/response"
+	"context"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
-	"net/http"
 )
 
-func (app *Application) status(w http.ResponseWriter, r *http.Request) {
-	data := map[string]string{
-		"Status":  "OK",
-		"Version": version.Get(),
-	}
+func (app *Server) handleHealthzGet(_ context.Context, _ *struct{}) (*struct{}, error) {
+	return nil, nil
+}
 
-	err := response.JSON(w, http.StatusOK, data)
-	if err != nil {
-		app.serverError(w, r, err)
+type VersionOutput struct {
+	Body struct {
+		Version string `json:"version" example:"1.0.0" doc:"Version of the API"`
 	}
 }
-func (app *Application) home(w http.ResponseWriter, r *http.Request) {
-	data := app.newTemplateData(r)
 
-	err := response.Page(w, http.StatusOK, data, "pages/home.tmpl")
-	if err != nil {
-		app.serverError(w, r, err)
-	}
+func (app *Server) handleVersionGet(_ context.Context, _ *struct{}) (*VersionOutput, error) {
+	v := version.Get()
+	resp := &VersionOutput{}
+	resp.Body.Version = v
+	return resp, nil
 }

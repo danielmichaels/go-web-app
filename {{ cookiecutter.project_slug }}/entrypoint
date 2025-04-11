@@ -1,7 +1,8 @@
 #!/bin/bash
 
-set -e
+set -ex
 
+{% if cookiecutter.database_choice == 'sqlite' %}
 DB_NAME=database/data.db
 APP=/usr/bin/app
 APP_SERVE="${APP} serve"
@@ -19,3 +20,27 @@ fi
 eval "exec ${APP_MIGRATE}"
 printf "Litestream checks completed.\nStarting app...\n"
 eval "exec litestream replicate -exec ${APP_SERVE}"
+
+{% else %}
+command=${1}
+
+DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=${POSTGRES_SSL_MODE}"
+case "${command}" in
+  "worker")
+    goose -dir /app/migrations postgres "${DATABASE_URL}" up
+    gecko worker
+    ;;
+  "serve")
+    goose -dir /app/migrations postgres "${DATABASE_URL}" up
+    gecko serve
+    ;;
+  "migrate")
+    goose -dir /app/migrations postgres "${DATABASE_URL}" up
+    ;;
+  *)
+    # Pass through all arguments to gecko
+    gecko "$@"
+    ;;
+esac
+
+{% endif %}

@@ -4,10 +4,38 @@ version: '3'
 dotenv:
   - .env
 
+env:
+  {% endraw -%}
+  {% if cookiecutter.database_choice == 'postgres' -%}
+  {% raw -%}
+  POSTGRES_DB: db
+  POSTGRES_USER: dbuser
+  POSTGRES_PASSWORD: dbuser
+  POSTGRES_PORT: 5432
+  {% endraw -%}
+  {% endif %}
+  {% raw %}
 
 vars:
-  DATABASE_URL:  "./database/data.db"
+  APP_NAME: {%endraw%}{{ '-'.join(cookiecutter['project_name'].lower().split()).replace('_', '-') }}{%raw%}
   SERVER_PORT: 9898
+  {% endraw -%}
+  {% if cookiecutter.database_choice == 'sqlite' -%}
+  {% raw -%}
+  DB_TYPE: "sqlite3"
+  DATABASE_URL:  "./database/data.db"
+  {% endraw -%}
+  {% endif -%}
+  {% if cookiecutter.database_choice == 'postgres' -%}
+  {% raw -%}
+  DB_TYPE: "postgres"
+  DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=${POSTGRES_SSL_MODE}
+  DATABASE_CONTAINER_NAME: db
+  DOCKER_COMPOSE_LOCAL: ./zarf/compose/docker-compose.yml
+  DOCKERFILE: ./zarf/docker/Dockerfile
+  {% endraw %}
+  {% endif %}
+{% raw %}
 
 tasks:
   default:
@@ -20,55 +48,73 @@ tasks:
     desc: run this when generated from cookiecutter
     cmds:
       - task: sqlc
-      - task: modtidy
-      - task: assets
-  modtidy:
+      - task: tidy
+
+  tidy:
     desc: runs go mod tidy
     cmds:
       - go mod tidy
-  yarn:
-    desc: Install javascript dependencies
-    cmds:
-      - yarn
 
-  tailwind:
-    desc: Install tailwind dependencies
+  serve:
+    desc: Run webserver
     cmds:
-      - yarn tailwind
-
-  alpine:
-    desc: Install Alpine.js dependencies
-    cmds:
-      - yarn alpine
-
-  assets:
-    desc: Run all javascript related tasks in one go
-    cmds:
-      - task: yarn
-      - task: tailwind
-      - task: alpine
-  dev:
-    desc: Run the development server with hot-reloading
-    summary: This is the equiv. of running the `mudmap api` CLI command
-    cmds:
-      - air
+      - air -c .air.toml -build.bin="./tmp/main serve {{.CLI_ARGS}}"
 
   sqlc:
     desc: Generate models using sqlc
+    dir: sql
     env:
       CGO_ENABLED: 1
     cmds:
-      - cd sql; sqlc generate
+      - sqlc generate
+  {% endraw %}
+  {% if cookiecutter.database_choice == 'postgres' -%}
+  {% raw -%}
+  compose:up:
+    desc: Run local compose
+    cmds:
+      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} up  --wait -d {{.CLI_ARGS}}
+      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} exec {{.DATABASE_CONTAINER_NAME}} /bin/sh -c 'until pg_isready; do sleep 1; done'
+      - task: db:migration:up
+#      - task: db:local:seed
+      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} logs -f
 
+  compose:down:
+    desc: Run a local database for development
+    cmds:
+      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} down {{.CLI_ARGS}}
+
+  compose:*:*:
+    vars:
+      CMD: "{{index .MATCH 0}}"
+      SVC: "{{index .MATCH 1}}"
+    cmds:
+      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} {{.CMD}} {{.SVC}} {{.CLI_ARGS}}
+
+  db:local:seed:
+    desc: Seed data into the local development DB
+    cmds:
+      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} cp ./sql/tests/test-data.sql {{.DATABASE_CONTAINER_NAME}}:/tmp/test-data.sql
+      - sleep 1
+      - |
+        docker compose -f {{.DOCKER_COMPOSE_LOCAL}} exec -it {{.DATABASE_CONTAINER_NAME}} psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -f /tmp/test-data.sql
+        if [ $? -ne 0 ]; then
+          echo "Error: Failed to seed the database."
+          exit 1
+        fi
+  #      - docker compose -f {{.DOCKER_COMPOSE_LOCAL}} exec -it {{.DATABASE_CONTAINER_NAME}} rm -rf /tmp/test-data.sql
+  {% endraw %}
+  {% endif -%}
+  {% raw -%}
   db:migration:up:
     desc: Run migrations (all of them)
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} up
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} up
 
   db:migration:down:
     desc: Drop all migrations
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} down
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} down
 
   db:migration:down:to:
     desc: Run migrations back to a specific version
@@ -78,20 +124,21 @@ tasks:
       Example,
       task db:migration:down:to -- 0001
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} down-to {{.CLI_ARGS}}
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} down-to {{.CLI_ARGS}}
+
   db:migration:create:
     desc: Create a new migration. The migration name is the value after --
     summary: |
       Create a new migrations file using the following syntax
       task db:migration:create -- my-new-migration
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} create {{.CLI_ARGS}} sql
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} fix
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} create {{.CLI_ARGS}} sql
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} fix
 
   db:migration:redo:
     desc: Rollback the latest migration, the reapply
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} redo
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} redo
 
   db:migration:status:
     desc: Get the migration status of the local sqlite database
@@ -99,27 +146,49 @@ tasks:
       Example usage
       task db:migration:status
     cmds:
-      - goose -dir ./assets/migrations sqlite3 {{.DATABASE_URL}} status
+      - goose -dir ./assets/migrations {{.DB_TYPE}} {{.DATABASE_URL}} status
 
-  db:shell:
-    desc: Drop into the `sqlite` shell
+  audit:
+    desc: Run linters and betteralign
     cmds:
-      - sqlite3 {{.DATABASE_URL}}
+      - task: betteralign
+      - task: golines
+      - task: golangci
 
-  jprq:
-    desc: An NGROK alternative for testing webhooks
+  betteralign:
+    desc: Run betteralign
     cmds:
-      - jprq http {{.SERVER_PORT}} --debug
+      - betteralign -apply ./... {{.CLI_ARGS}}
 
-  mailpit:
-    desc: Run the mailpit debug mail server
+  golangci:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./... -c .golangci.yml {{.CLI_ARGS}}
+
+  golines:
+    desc: run golines
+    cmds:
+      - golines . -w --ignore-generated --no-reformat-tags --ignored-dirs=ci --base-formatter=gofumpt {{.CLI_ARGS}}
+
+  golines-ci:
+    desc: run golines
     cmds:
       - |
-        docker run -d \
-        --restart unless-stopped \
-        --name=mailpit \
-        -p 8025:8025 \
-        -p 1025:1025 \
-        axllent/mailpit
+        output=$(golines . --ignore-generated --no-reformat-tags --ignored-dirs=ci --base-formatter=gofumpt --dry-run)
+        if [ -n "$output" ]; then
+          echo "$output"
+          exit 1
+        fi
+
+  install_bins:
+    desc: Install all required go binaries
+    cmds:
+      - go install github.com/pressly/goose/v3/cmd/goose@latest
+      - go install github.com/air-verse/air@latest
+      - go install github.com/go-task/task/v3/cmd/task@latest
+      - go install github.com/segmentio/golines@latest
+      - go install github.com/dkorunic/betteralign/cmd/betteralign@latest
+      - go install mvdan.cc/gofumpt@latest
+      - go install github.com/danielgtaylor/restish@latest
 
 {% endraw %}

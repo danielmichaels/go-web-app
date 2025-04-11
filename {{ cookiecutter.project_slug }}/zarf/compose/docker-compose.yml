@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16
+    container_name: app_db
+    restart: always
+    env_file:
+      - ../../.env
+    ports:
+      - "5432:5432"
+    networks:
+      - app_net
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - app_db:/var/lib/postgresql/data
+
+volumes:
+  app_db:
+
+networks:
+  app_net:
+

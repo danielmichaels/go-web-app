@@ -2,44 +2,136 @@ module {{ cookiecutter.go_module_path.strip('/') }}
 
 go {{ cookiecutter.go_version }}
 
+{% if cookiecutter.database_choice == 'sqlite' %}
 require (
-	github.com/go-chi/chi/v5 v5.0.7
-	github.com/go-chi/httplog v0.2.5
-	github.com/go-mail/mail/v2 v2.3.0
+        github.com/go-chi/chi/v5 v5.0.7
+        github.com/go-chi/httplog v0.2.5
+        github.com/go-mail/mail/v2 v2.3.0
+        github.com/joeshaw/envdecode v0.0.0-20200121155833-099f1fc765bd
+        github.com/rs/zerolog v1.28.0
+        golang.org/x/exp v0.0.0-20221114191408-850992195362
+        golang.org/x/text v0.10.0
+)
+
+require (
+        github.com/dustin/go-humanize v1.0.1 // indirect
+        github.com/google/uuid v1.3.0 // indirect
+        github.com/inconshreveable/mousetrap v1.1.0 // indirect
+        github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
+        github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+        github.com/spf13/pflag v1.0.5 // indirect
+        golang.org/x/mod v0.11.0 // indirect
+        golang.org/x/tools v0.10.0 // indirect
+        lukechampine.com/uint128 v1.3.0 // indirect
+        modernc.org/cc/v3 v3.41.0 // indirect
+        modernc.org/ccgo/v3 v3.16.14 // indirect
+        modernc.org/libc v1.24.1 // indirect
+        modernc.org/mathutil v1.5.0 // indirect
+        modernc.org/memory v1.6.0 // indirect
+        modernc.org/opt v0.1.3 // indirect
+        modernc.org/strutil v1.1.3 // indirect
+        modernc.org/token v1.1.0 // indirect
+)
+
+require (
+        github.com/go-playground/form/v4 v4.2.0
+        github.com/mattn/go-colorable v0.1.12 // indirect
+        github.com/mattn/go-isatty v0.0.19 // indirect
+        github.com/pressly/goose/v3 v3.13.0
+        github.com/spf13/cobra v1.7.0
+        golang.org/x/sys v0.9.0 // indirect
+        gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
+        gopkg.in/mail.v2 v2.3.1 // indirect
+        modernc.org/sqlite v1.23.1
+)
+{% endif %}
+{% if cookiecutter.database_choice == 'postgres' %}
+require (
+	github.com/MatusOllah/slogcolor v1.5.0
+	github.com/alecthomas/kong v1.10.0
+	github.com/danielgtaylor/huma/v2 v2.32.0
+	github.com/danielmichaels/gecko v0.0.0-20250328065637-55a1dfd51b3c
+	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/httplog/v2 v2.1.1
+	github.com/jackc/pgx/v5 v5.7.4
 	github.com/joeshaw/envdecode v0.0.0-20200121155833-099f1fc765bd
-	github.com/rs/zerolog v1.28.0
-	golang.org/x/exp v0.0.0-20221114191408-850992195362
-	golang.org/x/text v0.10.0
+	github.com/rs/xid v1.5.0
+	github.com/testcontainers/testcontainers-go v0.36.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.36.0
 )
 
 require (
-	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/google/uuid v1.3.0 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/tools v0.10.0 // indirect
-	lukechampine.com/uint128 v1.3.0 // indirect
-	modernc.org/cc/v3 v3.41.0 // indirect
-	modernc.org/ccgo/v3 v3.16.14 // indirect
-	modernc.org/libc v1.24.1 // indirect
-	modernc.org/mathutil v1.5.0 // indirect
-	modernc.org/memory v1.6.0 // indirect
-	modernc.org/opt v0.1.3 // indirect
-	modernc.org/strutil v1.1.3 // indirect
-	modernc.org/token v1.1.0 // indirect
+	dario.cat/mergo v1.0.1 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
+	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
+	github.com/containerd/log v0.1.0 // indirect
+	github.com/containerd/platforms v0.2.1 // indirect
+	github.com/cpuguy83/dockercfg v0.3.2 // indirect
+	github.com/danielgtaylor/mexpr v1.9.0 // indirect
+	github.com/danielgtaylor/shorthand/v2 v2.2.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/distribution/reference v0.6.0 // indirect
+	github.com/docker/docker v28.0.1+incompatible // indirect
+	github.com/docker/go-connections v0.5.0 // indirect
+	github.com/docker/go-units v0.5.0 // indirect
+	github.com/ebitengine/purego v0.8.2 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/klauspost/compress v1.17.10 // indirect
+	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/magiconair/properties v1.8.9 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/patternmatcher v0.6.0 // indirect
+	github.com/moby/sys/sequential v0.5.0 // indirect
+	github.com/moby/sys/user v0.1.0 // indirect
+	github.com/moby/sys/userns v0.1.0 // indirect
+	github.com/moby/term v0.5.0 // indirect
+	github.com/morikuni/aec v1.0.0 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
+	github.com/sethvargo/go-retry v0.3.0 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.1 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/stretchr/testify v1.10.0 // indirect
+	github.com/tklauser/go-sysconf v0.3.12 // indirect
+	github.com/tklauser/numcpus v0.6.1 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
+	go.opentelemetry.io/otel v1.35.0 // indirect
+	go.opentelemetry.io/otel/metric v1.35.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.32.0 // indirect
+	go.opentelemetry.io/otel/trace v1.35.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
+	google.golang.org/grpc v1.70.0 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
-	github.com/go-playground/form/v4 v4.2.0
-	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
-	github.com/pressly/goose/v3 v3.13.0
-	github.com/spf13/cobra v1.7.0
-	golang.org/x/sys v0.9.0 // indirect
-	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
-	gopkg.in/mail.v2 v2.3.1 // indirect
-	modernc.org/sqlite v1.23.1
+	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/pressly/goose/v3 v3.24.1
+	golang.org/x/sys v0.31.0 // indirect
 )
+{% endif %}
