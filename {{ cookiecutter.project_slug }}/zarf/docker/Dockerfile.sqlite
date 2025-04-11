@@ -25,17 +25,7 @@ RUN set -x && \
     mv "${litestream_binary_tgz_filename}" litestream.tgz
 RUN tar -xvzf litestream.tgz
 
-FROM node:lts-bookworm-slim as node
-RUN mkdir -p /build
-WORKDIR /build
-COPY ../.. .
-RUN yarn &&\
-    mkdir -p /build/assets/static/css/ &&\
-    mkdir -p /build/assets/static/js/ &&\
-    yarn tailwind &&\
-    yarn alpine
-
-FROM golang:1.20-bookworm AS builder
+FROM golang:{{ cookiecutter.go_version}} AS builder
 
 WORKDIR /build
 
@@ -43,28 +33,22 @@ WORKDIR /build
 COPY ../../go.mod go.mod
 RUN go mod download
 
-COPY --from=node ["/build/assets/static/css/theme.css", "/build/assets/static/css/theme.css"]
-COPY --from=node ["/build/assets/static/js/bundle.js", "/build/assets/static/js/bundle.js"]
-
-ENV CGO_ENABLED=1 GOOS=linux GOARCH=amd64
-
 COPY ../.. .
 
 RUN apt-get install git &&\
     go build  \
     -ldflags="-s -w" \
-    -o app github.com/danielmichaels/familyhub/cmd/app
+    -o {{ cookiecutter.cmd_name.strip()}} \
+     ./cmd/{{ cookiecutter.cmd_name.strip()}}
 
 FROM debian:bookworm-slim
 
 WORKDIR /app
 COPY --from=builder ["/build/litestream.yml", "/app/litestream.yml"]
 COPY --from=builder ["/build/entrypoint", "/app/entrypoint"]
-#COPY --from=builder ["/build/database/data.db", "/app/database/"]
 COPY --from=builder ["/build/app", "/usr/bin/app"]
 COPY --from=litestream ["/litestream/litestream", "/usr/bin/litestream"]
 
 # ensures that migrations are run using the embedded files
-ENV DOCKER=1
 ENTRYPOINT ["/app/entrypoint"]
 CMD ["app", "serve"]

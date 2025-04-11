@@ -1,4 +1,5 @@
 services:
+  {% if cookiecutter.database_choice == 'postgres' -%}
   db:
     image: postgres:16
     container_name: app_db
@@ -20,9 +21,41 @@ services:
       timeout: 5s
     volumes:
       - app_db:/var/lib/postgresql/data
+  {% endif -%}
+  {% if cookiecutter.use_nats -%}
+  nats:
+    image: nats:alpine
+    container_name: app-nats
+    ports:
+      - "8222:8222"
+      - "6222:6222"
+      - "4222:4222"
+    expose:
+      - "4222"
+    command: "--http_port 8222 --port 4222 -js"
+    networks:
+      - app_net
+    healthcheck:
+      test: [ "CMD-SHELL", "echo $$(wget --server-response http://localhost:8222/healthz 2>&1 | grep  '200 OK') | grep '200'  || exit 1" ]
+      interval: 3s
+      timeout: 10s
+      retries: 5
+      start_period: 4s
+  nats-gui:
+    image: ghcr.io/nats-nui/nui
+    ports:
+      - "31311:31311"
+    volumes:
+      - app_nats_nui:/db
+    networks:
+      - app_net
+  {% endif %}
 
 volumes:
   app_db:
+  {% if cookiecutter.use_nats -%}
+  app_nats_nui:
+  {% endif %}
 
 networks:
   app_net:

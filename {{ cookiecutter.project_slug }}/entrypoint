@@ -20,8 +20,8 @@ fi
 eval "exec ${APP_MIGRATE}"
 printf "Litestream checks completed.\nStarting app...\n"
 eval "exec litestream replicate -exec ${APP_SERVE}"
-
-{% else %}
+{% endif -%}
+{% if cookiecutter.database_choice == 'postgres' %}
 command=${1}
 
 DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=${POSTGRES_SSL_MODE}"

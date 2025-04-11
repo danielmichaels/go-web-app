@@ -19,13 +19,53 @@ def database_choice():
     """
     Create database specific files based on user choice
     """
-    if "{{ cookiecutter.database_choice }}" == "postgres":
+    db_choice = "{{ cookiecutter.database_choice }}"
+    if db_choice == "postgres":
         shutil.rmtree(os.path.join(CWD, "database"))
         os.remove(os.path.join(CWD, "litestream.yml"))
-    elif "{{ cookiecutter.database_choice }}" == "sqlite":
+    elif db_choice == "sqlite":
         shutil.rmtree(os.path.join(CWD, "internal/testhelpers"))
     else:
         raise ValueError("Invalid database choice")
+    handle_dockerfiles(db_choice)
+
+def handle_dockerfiles(db_choice):
+    """
+    Handle Docker files based on database choice.
+    Keeps the appropriate Dockerfile and removes the other.
+    """
+    docker_dir = os.path.join(CWD, "zarf/docker")
+    sqlite_dockerfile = os.path.join(docker_dir, "Dockerfile.sqlite")
+    postgres_dockerfile = os.path.join(docker_dir, "Dockerfile.postgres")
+    target_dockerfile = os.path.join(docker_dir, "Dockerfile")
+
+    if db_choice == "sqlite":
+        if os.path.exists(postgres_dockerfile):
+            os.remove(postgres_dockerfile)
+        if os.path.exists(sqlite_dockerfile):
+            shutil.move(sqlite_dockerfile, target_dockerfile)
+    elif db_choice == "postgres":
+        if os.path.exists(sqlite_dockerfile):
+            os.remove(sqlite_dockerfile)
+        if os.path.exists(postgres_dockerfile):
+            shutil.move(postgres_dockerfile, target_dockerfile)
+    else:
+        raise ValueError("Invalid database choice")
+
+
+def handle_compose_directory():
+    """
+    Delete the zarf/compose directory if use_nats is false and database_choice is sqlite.
+    This is because the compose setup is not needed in this configuration.
+    """
+    use_nats = "{{ cookiecutter.use_nats }}"
+    db_choice = "{{ cookiecutter.database_choice }}"
+
+    if not use_nats and db_choice == "sqlite":
+        compose_dir = os.path.join(CWD, "zarf/compose")
+        if os.path.exists(compose_dir):
+            shutil.rmtree(compose_dir)
+            print("Removed zarf/compose directory as it's not needed with SQLite and no NATS")
 
 def print_final_instructions():
     """
@@ -59,6 +99,7 @@ def print_final_instructions():
 runners = [
     create_env,
     database_choice,
+    handle_compose_directory,
     print_final_instructions,
 ]
 

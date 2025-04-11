@@ -5,7 +5,7 @@
   "cmd_name": "app",
   "project_description": "A Go web application boilerplate with options to add NATS, API servers and databases",
   "go_module_path": "github.com/{{ cookiecutter.github_username.strip() }}/{{ cookiecutter.project_name.replace(' ', '-') }}",
-  "use_nats": "False",
+  "use_nats": false,
   "database_choice": [
     "postgres",
     "sqlite"
