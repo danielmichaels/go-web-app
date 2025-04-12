@@ -5,6 +5,10 @@ import (
 	{% if cookiecutter.database_choice == "postgres" -%}
 	"{{ cookiecutter.go_module_path.strip() }}/internal/store"
 	{% endif -%}
+	{% if cookiecutter.use_nats -%}
+	"{{ cookiecutter.go_module_path.strip() }}/internal/natsio"
+	"os"
+	{%endif-%}
 )
 
 const svcAPI = "serve"
@@ -27,12 +31,36 @@ func (s *ServeCmd) Run() error {
 	}
 	defer setup.Close()
 
+  {% if cookiecutter.use_nats -%}
+	natsConn, err := natsio.Connect(setup.Config, setup.Logger)
+	if err != nil {
+		setup.Logger.Error("Failed to connect to NATS", "error", err)
+		os.Exit(1)
+	}
+	defer natsio.Close(natsConn, setup.Logger)
+	// Set up the example subscriber
+	exampleSubscriber := natsio.NewExampleSubscriber(natsConn, setup.Logger)
+	if err := exampleSubscriber.Subscribe(setup.Ctx); err != nil {
+		setup.Logger.Error("Failed to subscribe to example messages", "error", err)
+		os.Exit(1)
+	}
+	defer exampleSubscriber.Unsubscribe()
+	{% endif %}
+
 	{% if cookiecutter.database_choice == "postgres" -%}
 	dbtx := store.New(setup.PgxPool)
+  {% if cookiecutter.use_nats -%}
+	app := server.New(setup.Config, setup.Logger, dbtx, setup.PgxPool, natsConn)
+  {% else %}
 	app := server.New(setup.Config, setup.Logger, dbtx, setup.PgxPool)
 	{% endif %}
+	{% endif %}
 	{% if cookiecutter.database_choice == "sqlite" -%}
+  {% if cookiecutter.use_nats -%}
+	app := server.New(setup.Config, setup.Logger, natsConn)
+  {% else %}
 	app := server.New(setup.Config, setup.Logger)
+	{% endif %}
 	{% endif %}
 
 	err = app.Serve(setup.Ctx)

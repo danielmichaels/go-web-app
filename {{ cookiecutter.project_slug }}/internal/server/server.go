@@ -16,7 +16,12 @@ import (
 	"syscall"
 	"time"
 
+	{% if cookiecutter.database_choice == "postgres" -%}
 	"github.com/jackc/pgx/v5/pgxpool"
+	{% endif %}
+	{% if cookiecutter.use_nats -%}
+	"github.com/nats-io/nats.go"
+	{% endif %}
 
 	"github.com/go-chi/httplog/v2"
 )
@@ -25,7 +30,12 @@ type Server struct {
 	Conf    *config.Conf
 	Log     *slog.Logger
 	Db      *store.Queries
+	{% if cookiecutter.database_choice == "postgres" -%}
 	PgxPool *pgxpool.Pool
+	{% endif -%}
+	{% if cookiecutter.use_nats -%}
+	Nats *nats.Conn
+	{% endif %}
 }
 
 func New(
@@ -34,6 +44,9 @@ func New(
 	{% if cookiecutter.database_choice == "postgres" -%}
 	db *store.Queries,
 	pgxPool *pgxpool.Pool,
+	{% endif -%}
+	{% if cookiecutter.use_nats -%}
+	n *nats.Conn,
 	{% endif %}
 ) *Server {
 	return &Server{
@@ -41,7 +54,11 @@ func New(
 	Log: l,
 	{% if cookiecutter.database_choice == "postgres" -%}
 	Db: db,
-	PgxPool: pgxPool,{% endif -%}
+	PgxPool: pgxPool,
+	{% endif -%}
+	{% if cookiecutter.use_nats -%}
+	Nats: n,
+	{% endif -%}
 	}
 }
 

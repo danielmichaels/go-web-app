@@ -58,7 +58,7 @@ func NewSetup(service string) (*Setup, error) {
 }
 
 func (s *Setup) Close() {
-	s.Logger.Info("shutting down PgxPool")
+	s.Logger.Info("shutting down")
 	s.Cancel()
 	{% if cookiecutter.database_choice == "postgres" -%}
 	s.PgxPool.Close()

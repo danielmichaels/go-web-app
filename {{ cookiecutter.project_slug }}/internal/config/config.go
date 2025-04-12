@@ -12,6 +12,9 @@ type Conf struct {
 	Db      dbConf
 	Limiter limiter
 	AppConf appConf
+	{% if cookiecutter.use_nats -%}
+	Nats natsConf
+	{% endif -%}
 }
 
 type limiter struct {
@@ -19,6 +22,13 @@ type limiter struct {
 	Rps     int           `env:"RATE_LIMIT_RPS,default=10"`
 	BackOff time.Duration `env:"RATE_LIMIT_BACKOFF,default=20s"`
 }
+
+{% if cookiecutter.use_nats -%}
+type natsConf struct {
+	URL string `env:"NATS_URL,default=nats://localhost:4222"`
+	Timeout  time.Duration `env:"NATS_TIMEOUT,default=10s"`
+}
+{% endif -%}
 
 type dbConf struct {
 	Host     string `env:"POSTGRES_HOST,default=localhost"`

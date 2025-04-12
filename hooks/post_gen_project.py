@@ -67,6 +67,11 @@ def handle_compose_directory():
             shutil.rmtree(compose_dir)
             print("Removed zarf/compose directory as it's not needed with SQLite and no NATS")
 
+def handle_nats_package():
+    use_nats = "{{ cookiecutter.use_nats }}"
+    if not use_nats:
+        shutil.rmtree(os.path.join(CWD, "internal/natsio"))
+
 def print_final_instructions():
     """
     Simply prints final instructions for users to follow once they generate a project
@@ -100,6 +105,7 @@ runners = [
     create_env,
     database_choice,
     handle_compose_directory,
+    handle_nats_package,
     print_final_instructions,
 ]
 
