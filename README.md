@@ -24,7 +24,7 @@ See options below for more details.
 ## Usage
 
 > [!NOTE]
-> I recommend [uxv] to call cookiecutter
+> I recommend [uvx] to call cookiecutter
 
 
 To create a new web app using this repository you only need to run the following:
