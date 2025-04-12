@@ -6,12 +6,28 @@ This is a **highly** opinionated way of creating a Go web app. After manually
 creating these time and time again this is how I've settled on bootstrapping
 new app's. 
 
-The application uses Go templates but can also be just an API backend; `go-chi`
-is the router and is highly extensible.
+This application uses:
+
+- [huma](https://huma.rocks)
+- [NATS](https://nats.io)
+
+With supporting tools:
+- [goose](https://github.com/pressly/goose)
+- [sqlc](https://sqlc.dev)
+- [air](https://github.com/cosmtrek/air)
+- [task](https://taskfile.dev)
+
+NATS is optional. Sqlite is the default database but Postgres is an option.
+
+See options below for more details.
 
 ## Usage
 
-To create a new go-chi web app using this repository you only need to run the following:
+> [!NOTE]
+> I recommend [uxv] to call cookiecutter
+
+
+To create a new web app using this repository you only need to run the following:
 
 ```shell
 cookiecutter https://github.com/danielmichaels/go-web-app
@@ -20,18 +36,24 @@ cookiecutter https://github.com/danielmichaels/go-web-app
 And then answer the prompts. Here's an example run using the defaults:
 
 ```shell
-z ❯ cookiecutter https://github.com/danielmichaels/go-web-app
-github_username [danielmichaels]: 
-project_name [go-web-app]: 
-project_slug [go-web-app]: 
-cmd_name [app]: 
-project_description [A chi based web application capable of being driven by templates and APIs]: 
-go_module_path [github.com/danielmichaels/go-web-app]: 
-Select go_version:
-1 - 1.18
-2 - 1.19
-3 - 1.20
-Choose from 1, 2, 3 [3]: 
+# I recommend uxv to call cookiecutter
+z ❯ uvx cookiecutter https://github.com/danielmichaels/go-web-app
+  [1/9] github_username (danielmichaels): 
+  [2/9] project_name (go-web-app): 
+  [3/9] project_slug (go-web-app): 
+  [4/9] cmd_name (app): 
+  [5/9] project_description (A Go web application boilerplate with options to add NATS, API servers and databases): 
+  [6/9] go_module_path (github.com/danielmichaels/go-web-app): 
+  [7/9] use_nats [y/n] (y): 
+  [8/9] Select database_choice
+    1 - sqlite
+    2 - postgres
+    Choose from [1/2] (1): 
+  [9/9] Select go_version
+    1 - 1.24
+    2 - 1.23
+    Choose from [1/2] (1): 
+
 ```
 
 This will create a directory called `go-web-app` in the current working directory. All upper case
@@ -66,3 +88,5 @@ how to get your go module working.
     $ git remote add origin https://github.com/danielmichaels/go-web-app.git
     $ git push -u origin --all
 ```
+
+[uvx]: https://docs.astral.sh/uv/guides/tools/
