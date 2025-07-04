@@ -21,8 +21,7 @@ func (s *SlogHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func (s *SlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	clone := *s
-	return &clone
+	return &SlogHandler{Handler: s.Handler.WithAttrs(attrs)}
 }
 
 func (s *SlogHandler) WithGroup(name string) slog.Handler {
