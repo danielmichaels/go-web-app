@@ -25,8 +25,12 @@ type limiter struct {
 
 {% if cookiecutter.use_nats -%}
 type natsConf struct {
-	URL string `env:"NATS_URL,default=nats://localhost:4222"`
+	URL      string        `env:"NATS_URL,default=nats://localhost:4222"`
 	Timeout  time.Duration `env:"NATS_TIMEOUT,default=10s"`
+	{% if cookiecutter.embed_nats -%}
+	StoreDir string `env:"NATS_STORE_DIR,default=data/jetstream"`
+	Port     int    `env:"NATS_EMBED_PORT,default=0"`
+	{% endif -%}
 }
 {% endif -%}
 

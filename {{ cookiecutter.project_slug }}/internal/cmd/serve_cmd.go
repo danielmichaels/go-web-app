@@ -28,9 +28,19 @@ func (s *ServeCmd) Run() error {
 	defer app.Close()
 
   {% if cookiecutter.use_nats -%}
-	natsConn, err := natsio.Connect(app.Config, app.Logger)
+	{% if cookiecutter.embed_nats -%}
+	ns, err := natsio.StartEmbeddedServer(app.Config, app.Logger)
 	if err != nil {
-		app.Logger.Error("Failed to connect to NATS", "error", err)
+		app.Logger.Error("failed to start embedded NATS server", "error", err)
+		os.Exit(1)
+	}
+	defer ns.Shutdown()
+	natsConn, err := natsio.ConnectEmbedded(ns, app.Logger)
+	{% else -%}
+	natsConn, err := natsio.Connect(app.Config, app.Logger)
+	{% endif -%}
+	if err != nil {
+		app.Logger.Error("failed to connect to NATS", "error", err)
 		os.Exit(1)
 	}
 	defer natsio.Close(natsConn, app.Logger)

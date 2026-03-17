@@ -14,6 +14,9 @@ require (
 	modernc.org/sqlite v1.23.1
 	{% if cookiecutter.use_nats -%}
 	github.com/nats-io/nats.go v1.39.1
+	{% if cookiecutter.embed_nats -%}
+	github.com/nats-io/nats-server/v2 v2.12.5
+	{% endif -%}
 	{% endif -%}
 	{% if cookiecutter.use_river -%}
 	github.com/riverqueue/river v0.31.0
@@ -67,6 +70,9 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.36.0
 	{% if cookiecutter.use_nats -%}
 	github.com/nats-io/nats.go v1.39.1
+	{% if cookiecutter.embed_nats -%}
+	github.com/nats-io/nats-server/v2 v2.12.5
+	{% endif -%}
 	{% endif -%}
 	{% if cookiecutter.use_river -%}
 	github.com/riverqueue/river v0.31.0
