@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
+
 	"{{ cookiecutter.go_module_path.strip() }}/internal/cmd"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
-	"os"
 
 	"github.com/alecthomas/kong"
 
@@ -47,7 +48,7 @@ func run() error {
 
 	ctx := kong.Parse(&cli,
 		kong.Name(appName),
-		kong.Description(fmt.Sprintf("%s is a webserver - changeme!", appName)),
+		kong.Description("{{ cookiecutter.project_description }}"),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{
 			Compact: true,

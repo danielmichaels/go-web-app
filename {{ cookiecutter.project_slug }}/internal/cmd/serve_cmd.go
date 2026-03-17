@@ -9,64 +9,98 @@ import (
 	"{{ cookiecutter.go_module_path.strip() }}/internal/natsio"
 	"os"
 	{%endif-%}
+	{% if cookiecutter.use_river -%}
+	"{{ cookiecutter.go_module_path.strip() }}/internal/jobs"
+	{% if not cookiecutter.use_nats -%}
+	"os"
+	{% endif -%}
+	{%endif-%}
 )
-
-const svcAPI = "serve"
 
 type ServeCmd struct {
 }
 
-func (s *ServeCmd) validateArgs() error {
-	return nil
-}
-
 func (s *ServeCmd) Run() error {
-	if err := s.validateArgs(); err != nil {
-		return err
-	}
-
-	setup, err := NewSetup(svcAPI)
+	app, err := NewApp()
 	if err != nil {
 		return err
 	}
-	defer setup.Close()
+	defer app.Close()
 
   {% if cookiecutter.use_nats -%}
-	natsConn, err := natsio.Connect(setup.Config, setup.Logger)
+	{% if cookiecutter.embed_nats -%}
+	ns, err := natsio.StartEmbeddedServer(app.Config, app.Logger)
 	if err != nil {
-		setup.Logger.Error("Failed to connect to NATS", "error", err)
+		app.Logger.Error("failed to start embedded NATS server", "error", err)
 		os.Exit(1)
 	}
-	defer natsio.Close(natsConn, setup.Logger)
-	// Set up the example subscriber
-	exampleSubscriber := natsio.NewExampleSubscriber(natsConn, setup.Logger)
-	if err := exampleSubscriber.Subscribe(setup.Ctx); err != nil {
-		setup.Logger.Error("Failed to subscribe to example messages", "error", err)
+	defer ns.Shutdown()
+	natsConn, err := natsio.ConnectEmbedded(ns, app.Logger)
+	{% else -%}
+	natsConn, err := natsio.Connect(app.Config, app.Logger)
+	{% endif -%}
+	if err != nil {
+		app.Logger.Error("failed to connect to NATS", "error", err)
+		os.Exit(1)
+	}
+	defer natsio.Close(natsConn, app.Logger)
+	exampleSubscriber := natsio.NewExampleSubscriber(natsConn, app.Logger)
+	if err := exampleSubscriber.Subscribe(app.Ctx); err != nil {
+		app.Logger.Error("Failed to subscribe to example messages", "error", err)
 		os.Exit(1)
 	}
 	defer exampleSubscriber.Unsubscribe()
 	{% endif %}
 
+	{% if cookiecutter.use_river -%}
 	{% if cookiecutter.database_choice == "postgres" -%}
-	dbtx := store.New(setup.PgxPool)
+	jobClient, err := jobs.NewClient(app.Ctx, app.PgxPool, app.Logger)
+	{% endif -%}
+	{% if cookiecutter.database_choice == "sqlite" -%}
+	jobClient, err := jobs.NewClient(app.Ctx, app.Config.Db.DbName, app.Logger)
+	{% endif -%}
+	if err != nil {
+		app.Logger.Error("failed to create job client", "error", err)
+		os.Exit(1)
+	}
+	{% endif %}
+
+	{% if cookiecutter.database_choice == "postgres" -%}
+	dbtx := store.New(app.PgxPool)
   {% if cookiecutter.use_nats -%}
-	app := server.New(setup.Config, setup.Logger, dbtx, setup.PgxPool, natsConn)
+  {% if cookiecutter.use_river -%}
+	srv := server.New(app.Config, app.Logger, dbtx, app.PgxPool, natsConn, jobClient)
   {% else %}
-	app := server.New(setup.Config, setup.Logger, dbtx, setup.PgxPool)
+	srv := server.New(app.Config, app.Logger, dbtx, app.PgxPool, natsConn)
+  {% endif %}
+  {% else %}
+  {% if cookiecutter.use_river -%}
+	srv := server.New(app.Config, app.Logger, dbtx, app.PgxPool, jobClient)
+  {% else %}
+	srv := server.New(app.Config, app.Logger, dbtx, app.PgxPool)
+	{% endif %}
 	{% endif %}
 	{% endif %}
 	{% if cookiecutter.database_choice == "sqlite" -%}
   {% if cookiecutter.use_nats -%}
-	app := server.New(setup.Config, setup.Logger, natsConn)
+  {% if cookiecutter.use_river -%}
+	srv := server.New(app.Config, app.Logger, natsConn, jobClient)
   {% else %}
-	app := server.New(setup.Config, setup.Logger)
+	srv := server.New(app.Config, app.Logger, natsConn)
+  {% endif %}
+  {% else %}
+  {% if cookiecutter.use_river -%}
+	srv := server.New(app.Config, app.Logger, jobClient)
+  {% else %}
+	srv := server.New(app.Config, app.Logger)
+	{% endif %}
 	{% endif %}
 	{% endif %}
 
-	err = app.Serve(setup.Ctx)
+	err = srv.Serve(app.Ctx)
 	if err != nil {
-		app.Log.Error("api server error", "error", err, "msg", "failed to start server")
+		srv.Log.Error("api server error", "error", err, "msg", "failed to start server")
 	}
-	app.Log.Info("system shutdown")
+	srv.Log.Info("system shutdown")
 	return nil
 }

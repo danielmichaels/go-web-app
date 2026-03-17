@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 set -ex
 
@@ -28,18 +28,17 @@ DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:
 case "${command}" in
   "worker")
     goose -dir /app/migrations postgres "${DATABASE_URL}" up
-    gecko worker
+    {{ cookiecutter.cmd_name.strip() }} worker
     ;;
   "serve")
     goose -dir /app/migrations postgres "${DATABASE_URL}" up
-    gecko serve
+    {{ cookiecutter.cmd_name.strip() }} serve
     ;;
   "migrate")
     goose -dir /app/migrations postgres "${DATABASE_URL}" up
     ;;
   *)
-    # Pass through all arguments to gecko
-    gecko "$@"
+    {{ cookiecutter.cmd_name.strip() }} "$@"
     ;;
 esac
 

@@ -58,7 +58,7 @@ tasks:
   serve:
     desc: Run webserver
     cmds:
-      - air -c .air.toml -build.bin="./tmp/main serve {{.CLI_ARGS}}"
+      - air -c .air.toml {{.CLI_ARGS}}
 
   sqlc:
     desc: Generate models using sqlc

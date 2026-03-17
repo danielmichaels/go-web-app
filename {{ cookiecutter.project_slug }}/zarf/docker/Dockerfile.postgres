@@ -1,5 +1,5 @@
 FROM danielmichaels/ci-toolkit AS toolkit
-FROM golang:{{ cookiecutter.go_version}} AS builder
+FROM golang:{{ cookiecutter.go_version}}-alpine AS builder
 
 WORKDIR /build
 # only copy mod file for better caching
@@ -10,23 +10,19 @@ ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
 
 COPY ../.. .
 
-RUN apt-get install git -y &&\
+RUN apk add --no-cache git &&\
     go build  \
     -ldflags="-s -w" \
     -o {{ cookiecutter.cmd_name.strip()}} \
      ./cmd/{{ cookiecutter.cmd_name.strip()}}
 
-FROM debian:bookworm-slim
+FROM gcr.io/distroless/base-debian12:debug-nonroot
 WORKDIR /app
 
 COPY --from=toolkit ["/usr/local/bin/goose", "/usr/local/bin/goose"]
-COPY --from=builder ["/build/entrypoint", "/app/entrypoint"]
+COPY --chmod=755 --from=builder ["/build/entrypoint", "/app/entrypoint"]
 COPY --from=builder ["/build/assets/migrations", "/app/migrations"]
-COPY --from=builder ["/build/gecko", "/usr/bin/gecko"]
+COPY --from=builder ["/build/{{ cookiecutter.cmd_name.strip() }}", "/usr/bin/{{ cookiecutter.cmd_name.strip() }}"]
 
-RUN apt-get update && apt-get install ca-certificates curl -y &&\
-    chmod +x /app/entrypoint
-
-# ensures that migrations are run using the embedded files
 ENV DOCKER=1
 ENTRYPOINT ["/app/entrypoint"]

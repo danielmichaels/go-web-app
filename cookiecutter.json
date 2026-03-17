@@ -6,12 +6,15 @@
   "project_description": "A Go web application boilerplate with options to add NATS, API servers and databases",
   "go_module_path": "github.com/{{ cookiecutter.github_username.strip() }}/{{ cookiecutter.project_name.replace(' ', '-') }}",
   "use_nats": true,
+  "embed_nats": false,
   "database_choice": [
     "sqlite",
     "postgres"
   ],
   "go_version": [
-    "1.24",
-    "1.23"
-  ]
+    "1.26",
+    "1.25",
+    "1.24"
+  ],
+  "use_river": false
 }

@@ -5,7 +5,7 @@ import (
 	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
 )
 
-func (app *Server) handleHealthzGet(_ context.Context, _ *struct{}) (*struct{}, error) {
+func (app *App) handleHealthzGet(_ context.Context, _ *struct{}) (*struct{}, error) {
 	return nil, nil
 }
 
@@ -15,7 +15,7 @@ type VersionOutput struct {
 	}
 }
 
-func (app *Server) handleVersionGet(_ context.Context, _ *struct{}) (*VersionOutput, error) {
+func (app *App) handleVersionGet(_ context.Context, _ *struct{}) (*VersionOutput, error) {
 	v := version.Get()
 	resp := &VersionOutput{}
 	resp.Body.Version = v
