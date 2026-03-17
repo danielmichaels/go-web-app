@@ -4,10 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
-	"{{ cookiecutter.go_module_path.strip() }}/internal/store"
-	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,17 +12,20 @@ import (
 	"syscall"
 	"time"
 
+	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
+	"{{ cookiecutter.go_module_path.strip() }}/internal/store"
 	{% if cookiecutter.database_choice == "postgres" -%}
 	"github.com/jackc/pgx/v5/pgxpool"
 	{% endif %}
 	{% if cookiecutter.use_nats -%}
 	"github.com/nats-io/nats.go"
 	{% endif %}
-
-	"github.com/go-chi/httplog/v2"
+	{% if cookiecutter.use_river -%}
+	"{{ cookiecutter.go_module_path.strip() }}/internal/jobs"
+	{% endif %}
 )
 
-type Server struct {
+type App struct {
 	Conf    *config.Conf
 	Log     *slog.Logger
 	Db      *store.Queries
@@ -35,6 +34,9 @@ type Server struct {
 	{% endif -%}
 	{% if cookiecutter.use_nats -%}
 	Nats *nats.Conn
+	{% endif -%}
+	{% if cookiecutter.use_river -%}
+	Jobs *jobs.Client
 	{% endif %}
 }
 
@@ -47,46 +49,44 @@ func New(
 	{% endif -%}
 	{% if cookiecutter.use_nats -%}
 	n *nats.Conn,
+	{% endif -%}
+	{% if cookiecutter.use_river -%}
+	j *jobs.Client,
 	{% endif %}
-) *Server {
-	return &Server{
-	Conf: c,
-	Log: l,
+) *App {
+	return &App{
+		Conf: c,
+		Log:  l,
 	{% if cookiecutter.database_choice == "postgres" -%}
-	Db: db,
-	PgxPool: pgxPool,
+		Db:      db,
+		PgxPool: pgxPool,
 	{% endif -%}
 	{% if cookiecutter.use_nats -%}
-	Nats: n,
+		Nats: n,
+	{% endif -%}
+	{% if cookiecutter.use_river -%}
+		Jobs: j,
 	{% endif -%}
 	}
 }
 
-func httpLogger(cfg *config.Conf) *httplog.Logger {
-	var output io.Writer = os.Stdout
-	logger := httplog.NewLogger("web", httplog.Options{
-		JSON:             cfg.AppConf.LogJson,
-		LogLevel:         cfg.AppConf.LogLevel,
-		Concise:          cfg.AppConf.LogConcise,
-		RequestHeaders:   cfg.AppConf.LogRequestHeaders,
-		ResponseHeaders:  cfg.AppConf.LogResponseHeaders,
-		MessageFieldName: "message",
-		TimeFieldFormat:  time.RFC3339,
-		Tags: map[string]string{
-			"version": version.Get(),
-		},
-		QuietDownRoutes: []string{
-			"/",
-			"/ping",
-			"/healthz",
-		},
-		QuietDownPeriod: 10 * time.Second,
-		Writer:          output,
-	})
-	return logger
+func (app *App) Start(ctx context.Context) error {
+	{% if cookiecutter.use_river -%}
+	return app.Jobs.Start(ctx)
+	{% else -%}
+	return nil
+	{% endif %}
 }
 
-func (app *Server) Serve(ctx context.Context) error {
+func (app *App) Stop(ctx context.Context) error {
+	{% if cookiecutter.use_river -%}
+	return app.Jobs.Stop(ctx)
+	{% else -%}
+	return nil
+	{% endif %}
+}
+
+func (app *App) Serve(ctx context.Context) error {
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", app.Conf.Server.Port),
 		Handler:      app.routes(),
@@ -104,7 +104,6 @@ func (app *Server) Serve(ctx context.Context) error {
 
 		app.Log.Warn("signal caught", "signal", s.String())
 
-		// Allow processes to finish with a ten-second window
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		err := srv.Shutdown(ctx)
@@ -112,7 +111,6 @@ func (app *Server) Serve(ctx context.Context) error {
 			shutdownError <- err
 		}
 		app.Log.Warn("web-server", "addr", srv.Addr, "msg", "completing background tasks")
-		// Call wait so that the wait group can decrement to zero.
 		wg.Wait()
 		shutdownError <- nil
 	}()

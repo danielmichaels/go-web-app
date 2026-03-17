@@ -6,14 +6,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"testing"
-
-	"{{ cookiecutter.go_module_path.strip() }}/internal/tracing"
 )
 
 func TestSlogHandler_WithAttrs(t *testing.T) {
 	var buf bytes.Buffer
 	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	handler := &SlogHandler{Handler: jsonHandler}
+	handler := &SlogHandler{inner: jsonHandler}
 
 	attrs := []slog.Attr{
 		slog.String("service", "test-service"),
@@ -29,7 +27,7 @@ func TestSlogHandler_WithAttrs(t *testing.T) {
 func TestSlogHandler_WithGroup(t *testing.T) {
 	var buf bytes.Buffer
 	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	handler := &SlogHandler{Handler: jsonHandler}
+	handler := &SlogHandler{inner: jsonHandler}
 
 	newHandler := handler.WithGroup("test-group")
 
@@ -41,11 +39,11 @@ func TestSlogHandler_WithGroup(t *testing.T) {
 func TestSlogHandler_Handle(t *testing.T) {
 	var buf bytes.Buffer
 	jsonHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	handler := &SlogHandler{Handler: jsonHandler}
+	handler := &SlogHandler{inner: jsonHandler}
 	logger := slog.New(handler)
 
 	traceID := "test-trace-123"
-	ctx := context.WithValue(context.Background(), tracing.TraceCtxKey, traceID)
+	ctx := WithTraceID(context.Background(), traceID)
 
 	logger.InfoContext(ctx, "test message", "key", "value")
 

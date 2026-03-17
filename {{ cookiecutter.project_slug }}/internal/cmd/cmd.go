@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"context"
+	"log/slog"
+
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/logging"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/store"
-	"log/slog"
 	{% if cookiecutter.database_choice == "postgres" -%}
 	"github.com/jackc/pgx/v5/pgxpool"
 	{% endif %}
@@ -14,7 +15,7 @@ import (
 type Globals struct {
 }
 
-type Setup struct {
+type App struct {
 	Config  *config.Conf
 	Logger  *slog.Logger
 	{% if cookiecutter.database_choice == "postgres" -%}
@@ -25,10 +26,10 @@ type Setup struct {
 	Cancel  context.CancelFunc
 }
 
-func NewSetup(service string) (*Setup, error) {
+func NewApp() (*App, error) {
 	cfg := config.AppConfig()
-	logger, lctx := logging.SetupLogger(service, cfg)
-	ctx, cancel := context.WithCancel(lctx)
+	logger := logging.SetupLogger(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	db, err := store.NewDatabasePool(ctx, cfg)
 	if err != nil {
@@ -44,7 +45,7 @@ func NewSetup(service string) (*Setup, error) {
 		return nil, err
 	}
 	{% endif %}
-	s := &Setup{
+	a := &App{
 		Config:  cfg,
 		Logger:  logger,
 	{% if cookiecutter.database_choice == "postgres" -%}
@@ -54,14 +55,14 @@ func NewSetup(service string) (*Setup, error) {
 		Ctx:     ctx,
 		Cancel:  cancel,
 	}
-	return s, nil
+	return a, nil
 }
 
-func (s *Setup) Close() {
-	s.Logger.Info("shutting down")
-	s.Cancel()
+func (a *App) Close() {
+	a.Logger.Info("shutting down")
+	a.Cancel()
 	{% if cookiecutter.database_choice == "postgres" -%}
-	s.PgxPool.Close()
+	a.PgxPool.Close()
 	{% endif %}
-	s.Logger.Info("shutdown complete")
+	a.Logger.Info("shutdown complete")
 }

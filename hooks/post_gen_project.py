@@ -58,7 +58,7 @@ def handle_compose_directory():
     Delete the zarf/compose directory if use_nats is false and database_choice is sqlite.
     This is because the compose setup is not needed in this configuration.
     """
-    use_nats = "{{ cookiecutter.use_nats }}"
+    use_nats = "{{ cookiecutter.use_nats }}" == "True"
     db_choice = "{{ cookiecutter.database_choice }}"
 
     if not use_nats and db_choice == "sqlite":
@@ -68,9 +68,16 @@ def handle_compose_directory():
             print("Removed zarf/compose directory as it's not needed with SQLite and no NATS")
 
 def handle_nats_package():
-    use_nats = "{{ cookiecutter.use_nats }}"
+    use_nats = "{{ cookiecutter.use_nats }}" == "True"
     if not use_nats:
         shutil.rmtree(os.path.join(CWD, "internal/natsio"))
+
+def handle_river_package():
+    use_river = "{{ cookiecutter.use_river }}" == "True"
+    if not use_river:
+        jobs_dir = os.path.join(CWD, "internal/jobs")
+        if os.path.exists(jobs_dir):
+            shutil.rmtree(jobs_dir)
 
 def print_final_instructions():
     """
@@ -106,6 +113,7 @@ runners = [
     database_choice,
     handle_compose_directory,
     handle_nats_package,
+    handle_river_package,
     print_final_instructions,
 ]
 

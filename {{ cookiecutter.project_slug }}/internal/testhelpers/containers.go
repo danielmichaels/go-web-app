@@ -90,7 +90,7 @@ func runMigrations(connStr string) error {
 	defer db.Close()
 
 	// Set up goose with our embedded migrations
-	goose.SetBaseFS(assets.EmbeddedAssets)
+	goose.SetBaseFS(assets.EmbeddedFiles)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf("failed to set goose dialect: %w", err)
 	}
