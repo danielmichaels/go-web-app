@@ -69,8 +69,13 @@ def handle_compose_directory():
 
 def handle_nats_package():
     use_nats = "{{ cookiecutter.use_nats }}" == "True"
+    embed_nats = "{{ cookiecutter.embed_nats }}" == "True"
     if not use_nats:
         shutil.rmtree(os.path.join(CWD, "internal/natsio"))
+    elif not embed_nats:
+        embed_file = os.path.join(CWD, "internal/natsio/embed.go")
+        if os.path.exists(embed_file):
+            os.remove(embed_file)
 
 def handle_river_package():
     use_river = "{{ cookiecutter.use_river }}" == "True"

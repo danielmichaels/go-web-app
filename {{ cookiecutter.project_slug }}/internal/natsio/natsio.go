@@ -37,21 +37,6 @@ func Connect(cfg *config.Conf, logger *slog.Logger) (*nats.Conn, error) {
 	return nc, nil
 }
 
-{% if cookiecutter.embed_nats %}
-// ConnectEmbedded connects to an already-running embedded NATS server.
-func ConnectEmbedded(ns interface{ ClientURL() string }, logger *slog.Logger) (*nats.Conn, error) {
-	nc, err := nats.Connect(ns.ClientURL(),
-		nats.Name("{{ cookiecutter.project_name }}"),
-		nats.MaxReconnects(-1),
-	)
-	if err != nil {
-		return nil, err
-	}
-	logger.Info("Connected to embedded NATS server", "url", nc.ConnectedUrl())
-	return nc, nil
-}
-{% endif %}
-
 // Close gracefully closes the NATS connection
 func Close(nc *nats.Conn, logger *slog.Logger) {
 	if nc != nil {

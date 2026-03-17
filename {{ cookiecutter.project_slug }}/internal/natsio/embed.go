@@ -1,4 +1,3 @@
-{% if cookiecutter.use_nats and cookiecutter.embed_nats %}
 package natsio
 
 import (
@@ -8,6 +7,7 @@ import (
 
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
 	natsserver "github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
 )
 
 func StartEmbeddedServer(cfg *config.Conf, logger *slog.Logger) (*natsserver.Server, error) {
@@ -28,11 +28,7 @@ func StartEmbeddedServer(cfg *config.Conf, logger *slog.Logger) (*natsserver.Ser
 		return nil, fmt.Errorf("creating embedded NATS server: %w", err)
 	}
 
-	ns.SetLoggerV2(
-		&natsLogger{logger: logger},
-		false, false, false,
-	)
-
+	ns.SetLoggerV2(&natsLogger{logger: logger}, false, false, false)
 	go ns.Start()
 
 	if !ns.ReadyForConnections(5 * time.Second) {
@@ -43,27 +39,25 @@ func StartEmbeddedServer(cfg *config.Conf, logger *slog.Logger) (*natsserver.Ser
 	return ns, nil
 }
 
-// natsLogger adapts slog to the nats-server Logger interface.
+func ConnectEmbedded(ns *natsserver.Server, logger *slog.Logger) (*nats.Conn, error) {
+	nc, err := nats.Connect(ns.ClientURL(),
+		nats.Name("{{ cookiecutter.project_name }}"),
+		nats.MaxReconnects(-1),
+	)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("Connected to embedded NATS server", "url", nc.ConnectedUrl())
+	return nc, nil
+}
+
 type natsLogger struct {
 	logger *slog.Logger
 }
 
-func (l *natsLogger) Noticef(format string, v ...any) {
-	l.logger.Info(fmt.Sprintf(format, v...))
-}
-func (l *natsLogger) Warnf(format string, v ...any) {
-	l.logger.Warn(fmt.Sprintf(format, v...))
-}
-func (l *natsLogger) Fatalf(format string, v ...any) {
-	l.logger.Error(fmt.Sprintf(format, v...))
-}
-func (l *natsLogger) Errorf(format string, v ...any) {
-	l.logger.Error(fmt.Sprintf(format, v...))
-}
-func (l *natsLogger) Debugf(format string, v ...any) {
-	l.logger.Debug(fmt.Sprintf(format, v...))
-}
-func (l *natsLogger) Tracef(format string, v ...any) {
-	l.logger.Debug(fmt.Sprintf(format, v...))
-}
-{% endif %}
+func (l *natsLogger) Noticef(format string, v ...any) { l.logger.Info(fmt.Sprintf(format, v...)) }
+func (l *natsLogger) Warnf(format string, v ...any)   { l.logger.Warn(fmt.Sprintf(format, v...)) }
+func (l *natsLogger) Fatalf(format string, v ...any)  { l.logger.Error(fmt.Sprintf(format, v...)) }
+func (l *natsLogger) Errorf(format string, v ...any)  { l.logger.Error(fmt.Sprintf(format, v...)) }
+func (l *natsLogger) Debugf(format string, v ...any)  { l.logger.Debug(fmt.Sprintf(format, v...)) }
+func (l *natsLogger) Tracef(format string, v ...any)  { l.logger.Debug(fmt.Sprintf(format, v...)) }
