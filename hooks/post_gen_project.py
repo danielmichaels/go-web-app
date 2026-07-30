@@ -5,107 +5,144 @@ from pathlib import Path
 
 CWD = Path.cwd().absolute()
 
+DB_CHOICE = "{{ cookiecutter.database_choice }}"
+CI_CHOICE = "{{ cookiecutter.ci_choice }}"
+API_ONLY = "{{ cookiecutter.api_only }}" == "True"
+USE_TAILWIND = "{{ cookiecutter.use_tailwind }}" == "True"
+USE_PWA = "{{ cookiecutter.use_pwa }}" == "True"
+USE_NATS = "{{ cookiecutter.use_nats }}" == "True"
+EMBED_NATS = "{{ cookiecutter.embed_nats }}" == "True"
+USE_RIVER = "{{ cookiecutter.use_river }}" == "True"
+
+
+def remove(*relpaths):
+    """Delete files or directories, ignoring ones that are already absent."""
+    for rel in relpaths:
+        target = CWD / rel
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+
+
 def create_env():
-    """
-    Copy .env.sample to .env automatically after creating the project.
-    """
+    shutil.copyfile(CWD / ".env.example", CWD / ".env")
 
-    sample_envfile: str = os.path.join(CWD, ".env.example")
-    envfile: str = os.path.join(CWD, ".env")
-
-    shutil.copyfile(sample_envfile, envfile)
 
 def database_choice():
     """
-    Create database specific files based on user choice
+    Keep only the files belonging to the chosen database.
+
+    Postgres runs embedded for dev and tests, so it needs internal/embeddedpg
+    and the orphan-sweep script but no Litestream. SQLite replicates with
+    Litestream and keeps the shell entrypoint that wraps the process.
     """
-    db_choice = "{{ cookiecutter.database_choice }}"
-    if db_choice == "postgres":
-        shutil.rmtree(os.path.join(CWD, "database"))
-        os.remove(os.path.join(CWD, "litestream.yml"))
-    elif db_choice == "sqlite":
-        shutil.rmtree(os.path.join(CWD, "internal/testhelpers"))
+    if DB_CHOICE == "postgres":
+        remove("database", "litestream.yml", "entrypoint")
+    elif DB_CHOICE == "sqlite":
+        remove(
+            "internal/embeddedpg",
+            "internal/testhelpers",
+            "internal/store/advisory_lock.go",
+            "scripts/clean-pg.sh",
+            # Both drive the shared embedded-Postgres helper.
+            "internal/store/store_test.go",
+            "internal/server/routes_test.go",
+        )
     else:
-        raise ValueError("Invalid database choice")
-    handle_dockerfiles(db_choice)
+        raise ValueError(f"Invalid database choice: {DB_CHOICE}")
 
-def handle_dockerfiles(db_choice):
-    """
-    Handle Docker files based on database choice.
-    Keeps the appropriate Dockerfile and removes the other.
-    """
-    docker_dir = os.path.join(CWD, "zarf/docker")
-    sqlite_dockerfile = os.path.join(docker_dir, "Dockerfile.sqlite")
-    postgres_dockerfile = os.path.join(docker_dir, "Dockerfile.postgres")
-    target_dockerfile = os.path.join(docker_dir, "Dockerfile")
+    handle_dockerfiles()
 
-    if db_choice == "sqlite":
-        if os.path.exists(postgres_dockerfile):
-            os.remove(postgres_dockerfile)
-        if os.path.exists(sqlite_dockerfile):
-            shutil.move(sqlite_dockerfile, target_dockerfile)
-    elif db_choice == "postgres":
-        if os.path.exists(sqlite_dockerfile):
-            os.remove(sqlite_dockerfile)
-        if os.path.exists(postgres_dockerfile):
-            shutil.move(postgres_dockerfile, target_dockerfile)
+
+def handle_dockerfiles():
+    """Promote the chosen Dockerfile to the project root and drop the rest."""
+    docker_dir = CWD / "docker"
+    chosen = docker_dir / f"Dockerfile.{DB_CHOICE}"
+    if chosen.exists():
+        shutil.move(str(chosen), str(CWD / "Dockerfile"))
+    remove("docker")
+
+
+def handle_compose():
+    """
+    Drop compose.yaml when it would declare no services.
+
+    SQLite is a local file and the job dashboard only ships for Postgres, so a
+    SQLite project without NATS has nothing to compose.
+    """
+    if DB_CHOICE == "sqlite" and not USE_NATS:
+        remove("compose.yaml")
+
+
+def handle_ci_choice():
+    if CI_CHOICE == "github":
+        remove(".woodpecker.yml")
+    elif CI_CHOICE == "woodpecker":
+        remove(".github")
+    elif CI_CHOICE == "none":
+        remove(".github", ".woodpecker.yml")
     else:
-        raise ValueError("Invalid database choice")
+        raise ValueError(f"Invalid CI choice: {CI_CHOICE}")
 
 
-def handle_compose_directory():
+def handle_web_ui():
     """
-    Delete the zarf/compose directory if use_nats is false and database_choice is sqlite.
-    This is because the compose setup is not needed in this configuration.
-    """
-    use_nats = "{{ cookiecutter.use_nats }}" == "True"
-    db_choice = "{{ cookiecutter.database_choice }}"
+    Strip the rendering layer for an API-only service.
 
-    if not use_nats and db_choice == "sqlite":
-        compose_dir = os.path.join(CWD, "zarf/compose")
-        if os.path.exists(compose_dir):
-            shutil.rmtree(compose_dir)
-            print("Removed zarf/compose directory as it's not needed with SQLite and no NATS")
+    assets/static goes with it: assets/embed.go only embeds that directory
+    when a UI is present, so leaving an orphaned one behind would be dead
+    weight in the binary.
+    """
+    if API_ONLY:
+        remove("internal/ui", "assets/static", "assets/css")
+        return
+
+    if USE_TAILWIND:
+        # Generated from assets/css/input.css by `task css`, so shipping the
+        # hand-written one would just be overwritten on first build.
+        remove("assets/static/css/main.css")
+    else:
+        remove("assets/css")
+    if not USE_PWA:
+        remove("assets/static/manifest.json", "assets/static/sw.js")
+
 
 def handle_nats_package():
-    use_nats = "{{ cookiecutter.use_nats }}" == "True"
-    embed_nats = "{{ cookiecutter.embed_nats }}" == "True"
-    if not use_nats:
-        shutil.rmtree(os.path.join(CWD, "internal/natsio"))
-    elif not embed_nats:
-        embed_file = os.path.join(CWD, "internal/natsio/embed.go")
-        if os.path.exists(embed_file):
-            os.remove(embed_file)
+    if not USE_NATS:
+        remove("internal/natsio")
+    elif not EMBED_NATS:
+        remove("internal/natsio/embed.go")
+
 
 def handle_river_package():
-    use_river = "{{ cookiecutter.use_river }}" == "True"
-    if not use_river:
-        jobs_dir = os.path.join(CWD, "internal/jobs")
-        if os.path.exists(jobs_dir):
-            shutil.rmtree(jobs_dir)
+    if not USE_RIVER:
+        remove("internal/jobs")
+
+
+def prune_empty_dirs():
+    """Git cannot track an empty directory, so do not leave one behind."""
+    for rel in ("scripts", "assets/static/js", "assets/static/css", "assets/static"):
+        target = CWD / rel
+        if target.is_dir() and not any(target.iterdir()):
+            target.rmdir()
+
 
 def print_final_instructions():
-    """
-    Simply prints final instructions for users to follow once they generate a project
-    using this template!
-    """
     message = """
     ====================================================================================
     Your project `{{ cookiecutter.project_name.strip() }}` is ready!
-    The following is a *brief* overview of steps to push code to remote and
-    how to get your go module working.
-    - Move to project directory, and initialize a git repository:
-        $ cd {{ cookiecutter.project_name.strip() }} && git init
-    - Run the initialiser helper
+
+    - Move to the project directory and initialise a git repository:
+        $ cd {{ cookiecutter.project_slug }} && git init
+    - Install the tools and generate code:
         $ task init
-    - Check the code works (if you have `air` in your $PATH)
-        $ air
-        or:
+    - Run it. No database to install: {% if cookiecutter.database_choice == 'postgres' %}Postgres runs embedded from ./.data/postgres{% else %}SQLite lives in ./database{% endif %}
         $ task dev
-        or:
-        $ go run cmd/{{ cookiecutter.cmd_name.strip() }}/main.go
-    - Upload initial code to git:
-        $ git add -a
+    - Run the tests. Also no database required:
+        $ task test
+    - Upload the initial code:
+        $ git add -A
         $ git commit -m "Initial commit!"
         $ git remote add origin https://{{ cookiecutter.go_module_path.strip('/') }}.git
         $ git push -u origin --all
@@ -113,12 +150,16 @@ def print_final_instructions():
 
     print(textwrap.dedent(message))
 
+
 runners = [
     create_env,
     database_choice,
-    handle_compose_directory,
+    handle_compose,
+    handle_ci_choice,
+    handle_web_ui,
     handle_nats_package,
     handle_river_package,
+    prune_empty_dirs,
     print_final_instructions,
 ]
 

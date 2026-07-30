@@ -1,0 +1,143 @@
+# Woodpecker CI, v2 schema: no `version:` key, no top-level `volumes:` or
+# `secrets:`. Named volumes are created implicitly by being used in a step.
+#
+# The repo must be marked Trusted in Woodpecker admin, or every volume mount is
+# rejected with "Insufficient trust level to use volumes".
+#
+# `manual` appears in every event filter so the UI Restart button runs the whole
+# pipeline instead of just the clone.
+
+steps:
+  build:
+    image: golang:1.26
+    environment:
+      # Not under /go: the golang images declare VOLUME /go, and Docker rejects
+      # named volumes mounted at a subpath of an image-declared volume
+      # ("Duplicate mount point: /go/pkg/mod").
+      GOMODCACHE: /woodpecker/go/mod
+      GOCACHE: /woodpecker/go/build
+    volumes:
+      - go_mod:/woodpecker/go/mod
+      - go_build:/woodpecker/go/build
+    commands:
+      - go mod download
+{% if not cookiecutter.api_only -%}
+      - go tool templ generate
+{% endif -%}
+      - go build ./...
+      - go vet ./...
+    when:
+      - event: [push, pull_request, manual]
+
+  lint:
+    image: golangci/golangci-lint:v2.12.2-alpine
+    environment:
+      GOMODCACHE: /woodpecker/go/mod
+      GOCACHE: /woodpecker/go/build
+    volumes:
+      - go_mod:/woodpecker/go/mod
+      - go_build:/woodpecker/go/build
+    commands:
+{% if not cookiecutter.api_only -%}
+      - go tool templ generate
+{% endif -%}
+      - golangci-lint run ./... -c .golangci.yml
+    depends_on: [build]
+    when:
+      - event: [push, pull_request, manual]
+
+  test:
+{% if cookiecutter.database_choice == 'postgres' -%}
+    # Debian, NOT alpine: the embedded-postgres binaries are linked against
+    # glibc and will not run on musl.
+    image: golang:1.26
+    environment:
+      GOMODCACHE: /woodpecker/go/mod
+      GOCACHE: /woodpecker/go/build
+    volumes:
+      - go_mod:/woodpecker/go/mod
+      - go_build:/woodpecker/go/build
+      # Caches the extracted Postgres between runs. Under the ci user's home,
+      # not /root, because the tests do not run as root.
+      - embedded_pg:/home/ci/.embedded-postgres-go
+    commands:
+      - go mod download
+{% if not cookiecutter.api_only -%}
+      - go tool templ generate
+{% endif -%}
+      # initdb refuses to run as root, so the suite runs as an unprivileged
+      # user. Everything it touches has to be chowned first.
+      - useradd -m ci
+      - chown -R ci:ci /woodpecker/go /home/ci "$CI_WORKSPACE"
+      - |
+        cat > /tmp/run-tests.sh << 'EOF'
+        #!/bin/sh
+        set -e
+        export HOME=/home/ci
+        export GOMODCACHE=/woodpecker/go/mod
+        export GOCACHE=/woodpecker/go/build
+        exec go test -race ./...
+        EOF
+      - chmod +x /tmp/run-tests.sh
+      - su ci -c "cd $CI_WORKSPACE && /tmp/run-tests.sh"
+{% else -%}
+    image: golang:1.26
+    environment:
+      GOMODCACHE: /woodpecker/go/mod
+      GOCACHE: /woodpecker/go/build
+    volumes:
+      - go_mod:/woodpecker/go/mod
+      - go_build:/woodpecker/go/build
+    commands:
+      - go mod download
+{% if not cookiecutter.api_only -%}
+      - go tool templ generate
+{% endif -%}
+      - go test -race ./...
+{% endif -%}
+    depends_on: [build]
+    when:
+      - event: [push, pull_request, manual]
+
+  publish:
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      repo: ghcr.io/{{ cookiecutter.github_username.strip() }}/{{ cookiecutter.project_slug }}
+      registry: ghcr.io
+      platforms: linux/amd64,linux/arm64
+      dockerfile: Dockerfile
+      username:
+        from_secret: ghcr_username
+      password:
+        from_secret: ghcr_token
+      tags:
+        - latest
+        - ${CI_COMMIT_SHA:0:8}
+      build_args:
+        - VERSION=${CI_COMMIT_TAG:-${CI_COMMIT_BRANCH}}
+        - REVISION=${CI_COMMIT_SHA}
+    depends_on: [lint, test]
+    when:
+      - event: [push, manual]
+        branch: main
+
+  # Optional. Delete this step, or leave it: without the secret set, Woodpecker
+  # skips it rather than failing.
+  deploy:
+    image: alpine/curl
+    commands:
+      # Dokploy expects a POST shaped like a GitHub push event. A 301 with
+      # {"message":"Branch Not Match"} means the compose branch in Dokploy does
+      # not match main.
+      - |
+        curl -fsS -X POST "$DOKPLOY_DEPLOY_WEBHOOK" \
+          -H 'x-github-event: push' \
+          -H 'Content-Type: application/json' \
+          -d '{"ref":"refs/heads/main"}'
+    environment:
+      DOKPLOY_DEPLOY_WEBHOOK:
+        from_secret: dokploy_deploy_webhook
+    depends_on: [publish]
+    when:
+      - event: [push, manual]
+        branch: main

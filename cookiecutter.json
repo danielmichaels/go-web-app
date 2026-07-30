@@ -3,18 +3,27 @@
   "project_name": "go-web-app",
   "project_slug": "{{ '-'.join(cookiecutter['project_name'].lower().split()).replace('_', '-') }}",
   "cmd_name": "app",
-  "project_description": "A Go web application boilerplate with options to add NATS, API servers and databases",
+  "project_description": "A Go web application with embedded Postgres for dev and tests, templ + Datastar UI, and optional NATS and background jobs",
   "go_module_path": "github.com/{{ cookiecutter.github_username.strip() }}/{{ cookiecutter.project_name.replace(' ', '-') }}",
-  "use_nats": true,
-  "embed_nats": false,
   "database_choice": [
-    "sqlite",
-    "postgres"
+    "postgres",
+    "sqlite"
   ],
-  "go_version": [
-    "1.26",
-    "1.25",
-    "1.24"
+  "ci_choice": [
+    "github",
+    "woodpecker",
+    "none"
   ],
-  "use_river": false
+  "api_only": false,
+  "use_tailwind": false,
+  "use_pwa": false,
+  "use_nats": false,
+  "embed_nats": false,
+  "use_river": true,
+  "_copy_without_render": [
+    ".github/workflows/*",
+    "docker/*",
+    "assets/static/js/*",
+    "assets/static/sw.js"
+  ]
 }

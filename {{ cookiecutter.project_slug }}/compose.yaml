@@ -1,0 +1,85 @@
+{% if cookiecutter.database_choice == 'postgres' -%}
+# Nothing here is needed for day-to-day development: `task dev` runs Postgres
+# embedded in the process and `task test` starts its own. These services are
+# for the cases embedding does not cover — pointing psql or a GUI at a
+# conventional server, or running the standalone job dashboard.
+#
+# Start only what you need:  docker compose up -d db
+{% else -%}
+# Nothing here is needed for day-to-day development: SQLite is a local file.
+# These services cover the extras only.
+{% endif -%}
+services:
+{% if cookiecutter.database_choice == 'postgres' -%}
+  # An external Postgres. Point the app at it by setting DATABASE_URL, which
+  # takes precedence over the embedded instance.
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: {{ cookiecutter.project_slug }}
+    ports:
+      - "5432:5432"
+    networks:
+      - app_net
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d {{ cookiecutter.project_slug }}]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - app_db:/var/lib/postgresql/data
+{% endif -%}
+{% if cookiecutter.use_river and cookiecutter.database_choice == 'postgres' -%}
+  # The app can serve this dashboard itself (RIVER_UI_EMBEDDED), but only once
+  # you have put an admin check in front of it. Until then this standalone copy
+  # is the safe way to look at the queue.
+  riverui:
+    image: ghcr.io/riverqueue/riverui:latest
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/{{ cookiecutter.project_slug }}?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app_net
+{% endif -%}
+{% if cookiecutter.use_nats -%}
+  nats:
+    image: nats:alpine
+    ports:
+      - "4222:4222"
+      - "6222:6222"
+      - "8222:8222"
+    command: "--http_port 8222 --port 4222 -js"
+    networks:
+      - app_net
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O- http://localhost:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  nats-gui:
+    image: ghcr.io/nats-nui/nui
+    ports:
+      - "31311:31311"
+    volumes:
+      - app_nats_nui:/db
+    networks:
+      - app_net
+{% endif %}
+volumes:
+{% if cookiecutter.database_choice == 'postgres' -%}
+  app_db:
+{% endif -%}
+{% if cookiecutter.use_nats -%}
+  app_nats_nui:
+{% endif %}
+networks:
+  app_net:

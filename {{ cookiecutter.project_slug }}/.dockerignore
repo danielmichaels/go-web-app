@@ -1,0 +1,35 @@
+# Keep the build context small and keep local state out of the image.
+.git
+.github
+.gitignore
+.dockerignore
+.idea
+.vscode
+.worktrees
+
+# Local secrets and dev state.
+.env
+.data
+data
+database
+tmp
+bin
+dist
+
+# Generated: the builder stage produces these itself.
+*_templ.go
+{% if cookiecutter.use_tailwind -%}
+assets/static/css/main.css
+{% endif -%}
+
+# Not needed to build.
+docs
+mockups
+README.md
+CLAUDE.md
+compose.yaml
+Taskfile.yaml
+.air.toml
+.golangci.yml
+.woodpecker.yml
+*_test.go

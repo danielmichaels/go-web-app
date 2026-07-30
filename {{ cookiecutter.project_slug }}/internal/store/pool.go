@@ -2,55 +2,52 @@ package store
 
 import (
 	"context"
-{% if cookiecutter.database_choice == 'postgres' %}
+{% if cookiecutter.database_choice == 'postgres' -%}
+	"errors"
 	"fmt"
-	"os"
-{% endif %}
-	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
+{% endif -%}
 	"time"
 
-{% if cookiecutter.database_choice == 'postgres' %}
+	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
+
+{% if cookiecutter.database_choice == 'postgres' -%}
 	"github.com/jackc/pgx/v5/pgxpool"
-	{% endif %}
-{% if cookiecutter.database_choice == 'sqlite' %}
+{% else -%}
 	"database/sql"
-	{% endif %}
+
+	_ "modernc.org/sqlite"
+{% endif -%}
 )
 
-{% if cookiecutter.database_choice == 'postgres' %}
-func NewDatabasePool(ctx context.Context, cfg *config.Conf) (*pgxpool.Pool, error) {
-	minConns := 2
-	dbUrl := fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.Db.User,
-		cfg.Db.Password,
-		cfg.Db.Host,
-		cfg.Db.Port,
-		cfg.Db.Db,
-		cfg.Db.SSLMode,
-	)
-	// fly.io exposes DATABASE_URL to all of its machines and is the recommended way to connect
-	if os.Getenv("DATABASE_URL") != "" {
-		dbUrl = os.Getenv("DATABASE_URL")
-	}
-	dbPool := fmt.Sprintf(
-		"%s&pool_max_conns=%d&pool_min_conns=%d",
-		dbUrl,
-		cfg.Db.MaxConns,
-		minConns,
-	)
-	c, err := pgxpool.ParseConfig(dbPool)
-	if err != nil {
-		return nil, err
-	}
+{% if cookiecutter.database_choice == 'postgres' -%}
+// ErrNoDSN is returned when nothing supplied a database URL — neither
+// DATABASE_URL nor an embedded instance writing its own DSN back into config.
+var ErrNoDSN = errors.New("store: no database URL configured")
 
-	c.MaxConnLifetime = 1 * time.Hour
+const minConns = 2
+
+// NewDatabasePool opens the pool against cfg.Db.URL. By this point the URL is
+// either the deployment's DATABASE_URL or the DSN the embedded instance wrote
+// back into config at boot, so there is only one code path here.
+func NewDatabasePool(ctx context.Context, cfg *config.Conf) (*pgxpool.Pool, error) {
+	if cfg.Db.URL == "" {
+		return nil, ErrNoDSN
+	}
+	// Pool sizing is set on the parsed config rather than appended to the DSN:
+	// a supplied URL may carry no query string at all, and concatenating
+	// "&pool_max_conns=..." onto it silently corrupts the database name.
+	c, err := pgxpool.ParseConfig(cfg.Db.URL)
+	if err != nil {
+		return nil, fmt.Errorf("store: parse database url: %w", err)
+	}
+	c.MaxConns = int32(cfg.Db.MaxConns)
+	c.MinConns = minConns
+	c.MaxConnLifetime = time.Hour
 	c.MaxConnIdleTime = 30 * time.Second
+
 	return pgxpool.NewWithConfig(ctx, c)
 }
-{% endif %}
-
-{% if cookiecutter.database_choice == 'sqlite' %}
+{% else -%}
 func NewDatabasePool(ctx context.Context, cfg *config.Conf) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", cfg.Db.DbName)
 	if err != nil {
@@ -60,10 +57,9 @@ func NewDatabasePool(ctx context.Context, cfg *config.Conf) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	err = db.PingContext(ctx)
-	if err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return nil, err
 	}
 	return db, nil
 }
-{% endif %}
+{% endif -%}
