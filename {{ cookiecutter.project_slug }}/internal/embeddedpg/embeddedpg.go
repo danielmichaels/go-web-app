@@ -5,6 +5,7 @@ package embeddedpg
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -43,6 +44,9 @@ type Server struct {
 	// owned temp dirs cleaned up on Stop
 	ownedDataDir    string
 	ownedRuntimeDir string
+	// adopted marks a postmaster that outlived the process which launched
+	// it, so this Server has no library handle to stop it through.
+	adopted bool
 }
 
 func (o *Options) applyDefaults() error {
@@ -89,6 +93,70 @@ func stableBinDir(version embeddedpostgres.PostgresVersion) (string, error) {
 	return filepath.Join(home, ".embedded-postgres-go", string(version), "extracted"), nil
 }
 
+// isOwnPostmaster reports whether the process holding port is the postmaster
+// for dataDir. postmaster.pid records both facts — the data directory on line
+// 2 and the port on line 4 — so no connection is needed to tell this
+// instance's own leftover from a different checkout sharing the port.
+func isOwnPostmaster(dataDir string, port uint32) bool {
+	if dataDir == "" {
+		return false
+	}
+	lines, err := readPostmasterFile(dataDir)
+	if err != nil || len(lines) < 4 {
+		return false
+	}
+	pid, err := strconv.Atoi(lines[0])
+	if err != nil || !processAlive(pid) {
+		return false
+	}
+	recordedPort, err := strconv.Atoi(lines[3])
+	if err != nil || uint32(recordedPort) != port {
+		return false
+	}
+	return sameDir(lines[1], dataDir)
+}
+
+func readPostmasterFile(dataDir string) ([]string, error) {
+	b, err := os.ReadFile(filepath.Join(dataDir, "postmaster.pid"))
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimRight(string(b), "\n"), "\n"), nil
+}
+
+// sameDir compares paths through symlinks, because macOS resolves the temp
+// dirs used for data directories via /private.
+func sameDir(a, b string) bool {
+	resolve := func(p string) string {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return filepath.Clean(p)
+		}
+		if real, err := filepath.EvalSymlinks(abs); err == nil {
+			return real
+		}
+		return abs
+	}
+	return resolve(a) == resolve(b)
+}
+
+func portConflict(port uint32, dataDir string) error {
+	if dataDir == "" {
+		return fmt.Errorf("embeddedpg: %w: %d", ErrPortInUse, port)
+	}
+	return fmt.Errorf(
+		"embeddedpg: %w: %d is held by a postmaster that is not the one for %s "+
+			"(another checkout, or a stale instance); stop it or set EMBEDDED_POSTGRES_PORT",
+		ErrPortInUse, port, dataDir,
+	)
+}
+
+// ErrPortInUse reports that the port is held by a postmaster this instance
+// cannot prove is its own. Adopting one blindly makes two checkouts share a
+// database, and the difference only surfaces later as errors against tables
+// that look correct on disk.
+var ErrPortInUse = errors.New("port already in use")
+
 // portInUse reports whether something already accepts connections on port.
 func portInUse(port uint32) bool {
 	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
@@ -104,21 +172,25 @@ func portInUse(port uint32) bool {
 // Stop. Each call uses its own RuntimePath so parallel instances do not
 // race on extraction.
 //
-// For persistent dev use (DataDir set): if the port is already occupied —
-// e.g. a previous run was killed before Stop() — Start returns a handle
-// pointing at the existing process without launching a new one; Stop on
-// such a handle is a no-op.
+// A persistent instance (DataDir set) whose port is already held by its own
+// postmaster is adopted rather than restarted — air SIGKILLs the app on
+// reload, so Postgres routinely outlives it. Any other occupant is fatal;
+// see ErrPortInUse.
 func Start(opts Options) (*Server, error) {
 	if err := opts.applyDefaults(); err != nil {
 		return nil, err
 	}
 
-	if opts.DataDir != "" && portInUse(opts.Port) {
-		dsn := fmt.Sprintf(
-			"postgres://%s:%s@localhost:%d/%s?sslmode=disable",
-			opts.User, opts.Password, opts.Port, opts.Database,
-		)
-		return &Server{DSN: dsn}, nil
+	dsn := fmt.Sprintf(
+		"postgres://%s:%s@localhost:%d/%s?sslmode=disable",
+		opts.User, opts.Password, opts.Port, opts.Database,
+	)
+
+	if portInUse(opts.Port) {
+		if !isOwnPostmaster(opts.DataDir, opts.Port) {
+			return nil, portConflict(opts.Port, opts.DataDir)
+		}
+		return &Server{DSN: dsn, dataDir: opts.DataDir, adopted: true}, nil
 	}
 
 	// Reclaim what earlier runs could not: Stop never runs under SIGKILL,
@@ -182,10 +254,6 @@ func Start(opts Options) (*Server, error) {
 		return nil, fmt.Errorf("embeddedpg: start: %w", err)
 	}
 
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@localhost:%d/%s?sslmode=disable",
-		opts.User, opts.Password, opts.Port, opts.Database,
-	)
 	return &Server{
 		DSN:             dsn,
 		pg:              pg,
@@ -202,6 +270,12 @@ func Start(opts Options) (*Server, error) {
 // is still alive. So Stop reads the postmaster PID before asking the
 // library to stop, and force-kills it afterward if it is still running.
 func (s *Server) Stop() error {
+	// An adopted postmaster was launched by someone else and may still be
+	// serving them; a caller that never started it does not get to end it.
+	// It survives as an orphan, which the next run in this data dir adopts.
+	if s.adopted {
+		return nil
+	}
 	if s.pg != nil {
 		pid, pidErr := readPostmasterPID(s.dataDir)
 

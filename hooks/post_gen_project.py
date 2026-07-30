@@ -1,10 +1,12 @@
 import os
 import shutil
 import textwrap
+import zlib
 from pathlib import Path
 
 CWD = Path.cwd().absolute()
 
+PROJECT_SLUG = "{{ cookiecutter.project_slug }}"
 DB_CHOICE = "{{ cookiecutter.database_choice }}"
 CI_CHOICE = "{{ cookiecutter.ci_choice }}"
 API_ONLY = "{{ cookiecutter.api_only }}" == "True"
@@ -23,6 +25,41 @@ def remove(*relpaths):
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
+
+
+# The band sits below every OS ephemeral range -- Linux allocates from 32768,
+# macOS from 49152 -- so a port reserved here is never one the kernel might
+# hand to something else first.
+EMBEDDED_PORT_BASE = 15432
+EMBEDDED_PORT_SPAN = 1000
+
+
+def assign_embedded_port():
+    """Give this project its own Postgres port, derived from its slug.
+
+    Every project sharing one default port meant two of them could not run at
+    once, and the second silently attached to the first's database instead of
+    starting its own.
+    """
+    if DB_CHOICE != "postgres":
+        return
+
+    port = EMBEDDED_PORT_BASE + zlib.crc32(PROJECT_SLUG.encode()) % EMBEDDED_PORT_SPAN
+    edits = {
+        ".env.example": ("EMBEDDED_POSTGRES_PORT=5433", f"EMBEDDED_POSTGRES_PORT={port}"),
+        "internal/config/config.go": (
+            "EMBEDDED_POSTGRES_PORT,default=5433",
+            f"EMBEDDED_POSTGRES_PORT,default={port}",
+        ),
+        "Taskfile.yaml": ("localhost:5433", f"localhost:{port}"),
+    }
+
+    for rel, (old, new) in edits.items():
+        path = CWD / rel
+        text = path.read_text()
+        if old not in text:
+            raise ValueError(f"post_gen: expected {old!r} in {rel}; port not applied")
+        path.write_text(text.replace(old, new))
 
 
 def create_env():
@@ -152,6 +189,7 @@ def print_final_instructions():
 
 
 runners = [
+    assign_embedded_port,
     create_env,
     database_choice,
     handle_compose,
