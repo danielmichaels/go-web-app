@@ -1,0 +1,10 @@
+/* Tailwind v4 entry point. `task css` compiles this to
+   assets/static/css/main.css, which is what the layout links and what
+   assets/embed.go embeds. The output is generated — do not edit it, and do not
+   commit it. */
+@import "tailwindcss";
+
+/* Tailwind v4 takes theme configuration here rather than in a JS config. */
+@theme {
+  --color-accent: oklch(0.55 0.07 165);
+}

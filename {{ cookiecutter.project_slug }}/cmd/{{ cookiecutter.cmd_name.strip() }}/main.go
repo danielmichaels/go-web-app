@@ -29,8 +29,10 @@ func (v VersionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
 type CLI struct {
 	cmd.Globals
 
-	Version VersionFlag  `       help:"Print version information and quit" short:"v" name:"version"`
-	Serve   cmd.ServeCmd `cmd:"" help:"Run a server instance"`
+	Version     VersionFlag        `       help:"Print version information and quit" short:"v" name:"version"`
+	Serve       cmd.ServeCmd       `cmd:"" help:"Run a server instance"`
+	Migrate     cmd.MigrateCmd     `cmd:"" help:"Apply pending database migrations and exit"`
+	Healthcheck cmd.HealthcheckCmd `cmd:"" help:"Probe this instance over loopback; used by the container HEALTHCHECK"`
 }
 
 func run() error {

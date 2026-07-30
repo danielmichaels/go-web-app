@@ -1,45 +1,32 @@
 #!/bin/sh
+# Litestream has to be the parent process so it can checkpoint and replicate
+# while the app runs, which is why this wrapper exists at all. Migrations are
+# not run here: the binary applies them itself at boot.
+set -e
 
-set -ex
+DB_PATH="${LITESTREAM_LOCAL_DB_PATH:-database/data.db}"
+# Fixed name: the Dockerfile installs the binary here regardless of cmd_name.
+APP="/usr/bin/app"
 
-{% if cookiecutter.database_choice == 'sqlite' %}
-DB_NAME=database/data.db
-APP=/usr/bin/app
-APP_SERVE="${APP} serve"
-APP_MIGRATE="${APP} migrate"
-
-echo "litestream database checks commencing..."
-if [[ -f "${DB_NAME}" ]]; then
-  echo "Database already exists, skipping restore"
-else
-  echo "No Database found, restoring from replica if exists"
-  echo "litestream_local_DB_NAME_path: ${LITESTREAM_LOCAL_DB_NAME_PATH}"
-  litestream restore -v -if-replica-exists -o "${DB_NAME}" "${LITESTREAM_LOCAL_DB_NAME_PATH}" || echo "litestream attempted to restore but could not connect to or find the database"
-fi
-
-eval "exec ${APP_MIGRATE}"
-printf "Litestream checks completed.\nStarting app...\n"
-eval "exec litestream replicate -exec ${APP_SERVE}"
-{% endif -%}
-{% if cookiecutter.database_choice == 'postgres' %}
-command=${1}
-
-DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=${POSTGRES_SSL_MODE}"
-case "${command}" in
-  "worker")
-    goose -dir /app/migrations postgres "${DATABASE_URL}" up
-    {{ cookiecutter.cmd_name.strip() }} worker
-    ;;
-  "serve")
-    goose -dir /app/migrations postgres "${DATABASE_URL}" up
-    {{ cookiecutter.cmd_name.strip() }} serve
-    ;;
-  "migrate")
-    goose -dir /app/migrations postgres "${DATABASE_URL}" up
-    ;;
-  *)
-    {{ cookiecutter.cmd_name.strip() }} "$@"
-    ;;
+# Replication is optional. Without a replica URL there is nothing for
+# Litestream to do, and wrapping the process would only add a component that
+# fails on startup — so run the app directly instead.
+case "${S3_DB_URL:-}" in
+    "" | "s3://")
+        echo "no replica configured (S3_DB_URL); starting without litestream"
+        exec "${APP}" serve
+        ;;
 esac
 
-{% endif %}
+if [ -f "${DB_PATH}" ]; then
+    echo "database present at ${DB_PATH}, skipping restore"
+else
+    echo "no database at ${DB_PATH}, restoring from replica if one exists"
+    # -if-replica-exists exits 0 when there is no backup yet, which is the
+    # normal first-boot case.
+    litestream restore -if-replica-exists -o "${DB_PATH}" "${DB_PATH}" ||
+        echo "no replica to restore from; starting with an empty database"
+fi
+
+echo "starting ${APP} under litestream"
+exec litestream replicate -exec "${APP} serve"

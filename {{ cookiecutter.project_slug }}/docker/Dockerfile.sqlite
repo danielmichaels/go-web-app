@@ -1,0 +1,70 @@
+# Copied verbatim by cookiecutter (see _copy_without_render): cookiecutter
+# decides whether to render a file using a content-based binary heuristic that
+# false-positives on Dockerfiles, silently shipping an unrendered template. So
+# nothing here is templated — the binary is always installed as /usr/bin/app,
+# and the single main package under ./cmd is found by wildcard.
+FROM litestream/litestream:0.5.9 AS litestream
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /build
+
+# Only the module files first, so dependency download caches independently of
+# source changes.
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+
+COPY . .
+
+# Both generators are guarded rather than templated: the files they consume
+# only exist for some generated configurations.
+RUN if [ -f ./assets/css/input.css ]; then \
+      apk add --no-cache curl && \
+      curl -fsSL -o /usr/local/bin/tailwindcss \
+        "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.11/tailwindcss-linux-x64-musl" && \
+      chmod 755 /usr/local/bin/tailwindcss && \
+      tailwindcss -i ./assets/css/input.css -o ./assets/static/css/main.css --minify; \
+    fi
+
+# templ output is generated, never committed, so it must be produced here too.
+RUN if ls ./internal/ui/templates/*.templ >/dev/null 2>&1; then go tool templ generate; fi
+
+# Injected by CI; the fallbacks keep a bare `docker build` working.
+ARG VERSION=dev
+ARG REVISION=unknown
+
+ENV CGO_ENABLED=0 GOOS=linux
+
+# The module path comes from go.mod rather than being baked in, so the ldflags
+# stay correct if the module is ever renamed.
+RUN MODULE=$(go list -m) && \
+    go build \
+      -trimpath \
+      -ldflags="-s -w \
+        -X ${MODULE}/internal/version.Version=${VERSION} \
+        -X ${MODULE}/internal/version.Revision=${REVISION}" \
+      -o /out/app \
+      ./cmd/...
+
+# The debug variant, not static: Litestream has to wrap the process with
+# `replicate -exec`, and that entrypoint needs a shell.
+FROM gcr.io/distroless/base-debian12:debug-nonroot
+WORKDIR /app
+
+COPY --from=litestream ["/usr/local/bin/litestream", "/usr/local/bin/litestream"]
+COPY --chmod=755 ["entrypoint", "/app/entrypoint"]
+COPY --from=builder ["/out/app", "/usr/bin/app"]
+# /etc/litestream.yml is where litestream looks by default; anywhere else
+# needs -config passing to every invocation.
+COPY ["litestream.yml", "/etc/litestream.yml"]
+
+ENV DOCKER=1
+EXPOSE 9898
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/usr/bin/app", "healthcheck"]
+
+# The interpreter is named explicitly because this image has no /bin/sh: the
+# debug variant ships busybox at /busybox/sh and leaves /bin empty, so the
+# script's own `#!/bin/sh` cannot resolve. Keeping the shebang portable means
+# the same script still runs locally.
+ENTRYPOINT ["/busybox/sh", "/app/entrypoint"]

@@ -1,4 +1,6 @@
 {% raw %}
+# LITESTREAM_LOCAL_DB_PATH must match the value in .env and the path the
+# entrypoint restores to.
 dbs:
   - path: "${LITESTREAM_LOCAL_DB_PATH}"
     replicas:
