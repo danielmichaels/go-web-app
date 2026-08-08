@@ -4,7 +4,42 @@
    commit it. */
 @import "tailwindcss";
 
-/* Tailwind v4 takes theme configuration here rather than in a JS config. */
+/* The same palette layout.templ inlines when Tailwind is not in use, so the
+   two builds render alike.
+
+   Utilities compile to var(--color-*) rather than a literal, so redefining the
+   variables below swaps the whole theme. That is why no class in this project
+   carries a dark: variant: a colour defined only behind dark: has no matching
+   light definition, which is how a page ends up with one theme's text on the
+   other theme's background. */
 @theme {
-  --color-accent: oklch(0.55 0.07 165);
+  --color-ground: #fbfbfa;
+  --color-surface: #ffffff;
+  --color-line: #e3e2df;
+  --color-ink: #1b1d1e;
+  --color-muted: #6b6f72;
+  --color-accent: #2f6f5e;
+  --color-danger: #9a2c2c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-ground: #131516;
+    --color-surface: #1b1e1f;
+    --color-line: #2e3233;
+    --color-ink: #e8e6e3;
+    --color-muted: #9aa0a3;
+    --color-accent: #6cc0a5;
+    --color-danger: #e08585;
+  }
+}
+
+/* Preflight deliberately leaves body unpainted. Without this the page keeps the
+   browser's white ground while every surface follows the theme. */
+@layer base {
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
 }
