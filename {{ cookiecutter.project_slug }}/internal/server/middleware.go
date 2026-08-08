@@ -1,11 +1,13 @@
 package server
 
 import (
-	"log/slog"
-	"net/http"
 {% if cookiecutter.use_river and not cookiecutter.api_only -%}
 	"strings"
 {% endif -%}
+	"log/slog"
+	"net/http"
+
+	"{{ cookiecutter.go_module_path.strip() }}/internal/logging"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
@@ -35,13 +37,16 @@ func (app *App) ApiKeyAuth(api huma.API) func(ctx huma.Context, next func(huma.C
 // memory.
 func (app *App) httplogOptions() *httplog.Options {
 	o := &httplog.Options{
+		// A floor, not the level records are written at: httplog picks that from
+		// the status (5xx error, 4xx warn, OPTIONS debug). Info drops preflights.
 		Level:         slog.LevelInfo,
-		Schema:        httplog.SchemaOTEL.Concise(!app.Conf.AppConf.LogJson),
+		Schema:        logging.AccessLogSchema.Concise(!app.Conf.AppConf.LogJson),
 		RecoverPanics: true,
 		Skip:          app.skipRequestLog,
 	}
-	// Concise blanks the values but keeps the header keys, so headers are only
-	// worth collecting when the full schema is in play.
+	// Concise blanks most schema field names but keeps the header keys, so
+	// collecting headers in dev would print a lone header group beside an
+	// otherwise bare summary line.
 	if app.Conf.AppConf.LogJson {
 		if app.Conf.AppConf.LogRequestHeaders {
 			o.LogRequestHeaders = []string{"Origin"}

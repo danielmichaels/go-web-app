@@ -118,6 +118,39 @@ restart per missing variable.
 
 Set `APP_ENV=production` in a deployment: it turns the development-friendly
 defaults into hard startup errors.
+
+## Logging
+
+`LOG_JSON=false` prints one coloured line per record for local work.
+`LOG_JSON=true` emits JSON using [OpenTelemetry][otel] field names — including
+for slog's own keys, which are **not** left at their defaults:
+
+| slog default | Emitted as |
+|---|---|
+| `time` | `timestamp` |
+| `level` | `severity_text` |
+| `msg` | `body` |
+| `error` | `error.message` |
+
+Point log queries and dashboards at those names. The choice lives in one place,
+`logging.AccessLogSchema`, and both the application logger and the access log
+read it — installing it on only one of them is what produces records that are
+half OTEL and half slog. Switching to Elastic Common Schema is a one-word
+change there, but it renames every field, so decide before building dashboards
+rather than after.
+
+Any record logged with a request context carries `trace_id`, so a line written
+deep in a service call ties back to the request that caused it.
+
+Access logs are [httplog][httplog]'s and take their level from the response
+status: 5xx error, 4xx warn, everything else info.
+Health checks{% if not cookiecutter.api_only %} and static assets{% endif %} are not logged at all, and a 404
+for a route that never matched is logged at info rather than warn, so bot
+probing does not turn the dashboard yellow. A handler returning 404 for a
+missing resource still warns.
+
+[otel]: https://opentelemetry.io/docs/specs/semconv/general/logs/
+[httplog]: https://github.com/go-chi/httplog
 {% if not cookiecutter.api_only %}
 ## HTTP surface
 
