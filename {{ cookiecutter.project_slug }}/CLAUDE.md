@@ -72,6 +72,12 @@ file: it is generated and gitignored.
 {% if not cookiecutter.api_only -%}
 - **HTML** is templ; interactivity is Datastar. A handler that updates part of
   a page returns an SSE patch, not a redirect.
+- **CSS classes** are named through the `class*` constants in
+  `internal/ui/templates/views.go`; templates never spell a class inline.{% if cookiecutter.use_tailwind %}
+  Those constants hold Tailwind utilities, compiled by `task css`.{% else %}
+  The stylesheet itself is inline in `layout.templ`.{% endif %}
+- `/app/welcome` is a first-run tour of the scaffolding, not application code.
+  Delete `welcome.templ` and its two routes once it has served its purpose.
 {% endif -%}
 
 ## Testing

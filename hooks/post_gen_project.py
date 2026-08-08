@@ -136,11 +136,11 @@ def handle_web_ui():
         remove("internal/ui", "assets/static", "assets/css")
         return
 
-    if USE_TAILWIND:
-        # Generated from assets/css/input.css by `task css`, so shipping the
-        # hand-written one would just be overwritten on first build.
-        remove("assets/static/css/main.css")
-    else:
+    # Neither build serves a stylesheet from the tree as committed: Tailwind
+    # generates this file with `task css`, and the hand-written stylesheet is
+    # inline in layout.templ so a fresh project cannot render unstyled.
+    remove("assets/static/css/main.css")
+    if not USE_TAILWIND:
         remove("assets/css")
     if not USE_PWA:
         remove("assets/static/manifest.json", "assets/static/sw.js")

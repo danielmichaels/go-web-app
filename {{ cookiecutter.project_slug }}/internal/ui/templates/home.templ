@@ -2,37 +2,70 @@ package templates
 
 templ Home(v HomeView) {
 	@Layout(v.Title) {
-		<h1>{ v.Title }</h1>
-		if v.Flash != "" {
-			<p class="flash" role="status">{ v.Flash }</p>
-		}
-		<p>
-			This page is rendered with templ and updated in place by Datastar.
-			Submitting the form below patches only the list, without a reload.
-		</p>
-		<form data-on-submit="@post('/app/examples', {contentType: 'form'})">
-			<label for="text">New example</label>
-			<input id="text" name="text" type="text" autocomplete="off" required/>
-			<button type="submit">Add</button>
-		</form>
-		@ExampleList(v.Items, "")
+		<section class={ classSection }>
+			<h1 class={ classTitle }>Examples</h1>
+			if v.Flash != "" {
+				<p class={ classFlash } role="status">{ v.Flash }</p>
+			}
+			<p class={ classLead }>
+				One working feature, wired end to end: a form, a table, and a
+				handler that patches the list in place. Build on it, or read
+				<a class={ classLink } href="/app/welcome">the tour</a> first.
+			</p>
+			@ExampleForm()
+			@ExampleList(v.Items, "")
+		</section>
 	}
+}
+
+// ExampleForm carries the client half of the example feature. The signals are
+// declared here rather than left to data-bind so the counter and the disabled
+// button have something to read on the very first paint.
+templ ExampleForm() {
+	<form
+		class={ classForm }
+		data-signals="{text: ''}"
+		data-indicator="adding"
+		data-on:submit="@post('/app/examples', {contentType: 'form'})"
+	>
+		<label class={ classLabel } for="text">New example</label>
+		<input
+			id="text"
+			class={ classInput }
+			name="text"
+			type="text"
+			autocomplete="off"
+			required
+			data-bind:text
+		/>
+		<button
+			class={ classButton }
+			type="submit"
+			data-attr:disabled="$adding || $text.trim().length === 0 || $text.length > 280"
+			data-text="$adding ? 'Adding…' : 'Add'"
+		>Add</button>
+		<p
+			data-attr:class={ "$text.length > 280 ? '" + classHintOver + "' : '" + classHint + "'" }
+			data-text="`${$text.length}/280`"
+			class={ classHint }
+		>0/280</p>
+	</form>
 }
 
 // ExampleList is patched on its own by the create handler, so it carries the
 // id Datastar targets. Rendering it standalone must produce the same markup as
 // rendering it inside Home.
 templ ExampleList(items []ExampleView, problem string) {
-	<section id="examples">
+	<section id="examples" class={ classSection }>
 		if problem != "" {
-			<p class="error" role="alert">{ problem }</p>
+			<p class={ classError } role="alert">{ problem }</p>
 		}
 		if len(items) == 0 {
-			<p class="empty">Nothing here yet.</p>
+			<p class={ classEmpty }>Nothing here yet.</p>
 		} else {
-			<ul>
+			<ul class={ classList }>
 				for _, item := range items {
-					<li data-example-id={ item.ID }>{ item.Text }</li>
+					<li class={ classItem } data-example-id={ item.ID }>{ item.Text }</li>
 				}
 			</ul>
 		}

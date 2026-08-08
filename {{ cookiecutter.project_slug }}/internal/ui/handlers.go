@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"{{ cookiecutter.go_module_path.strip() }}/internal/ui/templates"
 
 	datastar "github.com/starfederation/datastar-go/datastar"
 )
+
+// pulseInterval is how often the welcome tour's stream pushes a new clock.
+const pulseInterval = time.Second
 
 func (h *Handlers) handleHome(w http.ResponseWriter, r *http.Request) {
 	items, err := h.examples(r.Context())
@@ -25,6 +29,51 @@ func (h *Handlers) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := templates.Home(view).Render(r.Context(), w); err != nil {
 		h.serverError(w, r, err, "render home")
+	}
+}
+
+func (h *Handlers) handleWelcome(w http.ResponseWriter, r *http.Request) {
+	items, err := h.examples(r.Context())
+	if err != nil {
+		h.serverError(w, r, err, "list examples")
+		return
+	}
+
+	view := templates.WelcomeView{
+		Title:    "Welcome to {{ cookiecutter.project_name }}",
+		Features: templates.Features(h.featureOpts()),
+		Items:    items,
+	}
+	if err := templates.Welcome(view).Render(r.Context(), w); err != nil {
+		h.serverError(w, r, err, "render welcome")
+	}
+}
+
+// handleStream holds the connection open and pushes a re-rendered fragment on
+// every tick. It returns when the browser goes away, which is the only thing
+// that ends it.
+func (h *Handlers) handleStream(w http.ResponseWriter, r *http.Request) {
+	sse := datastar.NewSSE(w, r)
+
+	ticker := time.NewTicker(pulseInterval)
+	defer ticker.Stop()
+
+	for ticks := 1; ; ticks++ {
+		view := templates.PulseView{
+			Clock: time.Now().Format(time.TimeOnly),
+			Ticks: ticks,
+		}
+		if err := sse.PatchElementTempl(templates.Pulse(view)); err != nil {
+			// A closed tab reaches here as a write error, which is ordinary
+			// rather than a fault worth logging on every navigation.
+			return
+		}
+
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -59,6 +108,18 @@ func (h *Handlers) handleExampleCreate(w http.ResponseWriter, r *http.Request) {
 		// log line.
 		h.Log.ErrorContext(r.Context(), "patch example list", "error", err)
 	}
+}
+
+// featureOpts tells the welcome tour what this instance is actually serving,
+// as opposed to what it was generated with.
+func (h *Handlers) featureOpts() templates.FeatureOpts {
+	opts := templates.FeatureOpts{}
+{% if cookiecutter.use_river -%}
+	if h.Conf.AppConf.RiverUIEnabled {
+		opts.JobsDashboard = h.Conf.AppConf.RiverUIPath
+	}
+{% endif -%}
+	return opts
 }
 
 // examples converts store rows into the view model. The conversion is not

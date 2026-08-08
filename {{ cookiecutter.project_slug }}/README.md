@@ -22,7 +22,18 @@ Tooling used by those tasks: [task](https://taskfile.dev),
 `task install_bins`.
 {% if cookiecutter.use_tailwind %}
 Tailwind is a standalone binary and is not installed by that task — see the
-[Tailwind CLI docs](https://tailwindcss.com/blog/standalone-cli).
+[Tailwind CLI docs](https://tailwindcss.com/blog/standalone-cli). Until it is
+on `PATH` and `task css` has run, `assets/static/css/main.css` does not exist
+and every page renders unstyled. `task css:watch` rebuilds it alongside
+`task dev`.
+
+Templates name their classes through the `class*` constants in
+`internal/ui/templates/views.go`, which is the only file that differs between
+a Tailwind project and a hand-written-CSS one.
+{% else %}
+The stylesheet is inline in `internal/ui/templates/layout.templ`, and class
+names come from the `class*` constants in `internal/ui/templates/views.go`.
+Nothing is compiled and nothing is fetched, so a page cannot render unstyled.
 {% endif %}
 
 ## Layout
@@ -159,6 +170,8 @@ missing resource still warns.
 | `/healthz`, `/version` | Monitoring, also in the OpenAPI spec |
 | `/docs`, `/openapi.json` | API reference |
 | `/app` | The rendered UI |
+| `/app/welcome` | First-run tour of what was scaffolded — delete when it has served its purpose |
+| `/app/stream` | SSE endpoint the tour uses to demonstrate server push |
 | `/static/*` | Embedded assets |
 {% if cookiecutter.use_river -%}
 | `{{ '{{' }} RIVER_UI_PATH {{ '}}' }}` | Job dashboard — off unless `RIVER_UI_EMBEDDED=true`, and unauthenticated until you gate it |

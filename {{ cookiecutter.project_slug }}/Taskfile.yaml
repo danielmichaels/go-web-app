@@ -68,6 +68,13 @@ vars:
 {%- if cookiecutter.use_tailwind %}
 {% raw %}  css:
     desc: Compile Tailwind CSS into the embedded static tree
+    preconditions:
+      # Without this the output file is never written, the layout's stylesheet
+      # link 404s, and every page renders with no styling at all.
+      - sh: command -v tailwindcss
+        msg: |
+          tailwindcss not found on PATH. It is a standalone binary, not a Go
+          tool: https://tailwindcss.com/blog/standalone-cli
     cmds:
       - tailwindcss -i ./assets/css/input.css -o ./assets/static/css/main.css --minify
 

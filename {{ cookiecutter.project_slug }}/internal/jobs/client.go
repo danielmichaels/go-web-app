@@ -3,6 +3,8 @@ package jobs
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log/slog"
 {% if cookiecutter.database_choice == 'postgres' or not cookiecutter.api_only -%}
 	"fmt"
@@ -10,6 +12,8 @@ import (
 {% if not cookiecutter.api_only -%}
 	"net/http"
 {% endif -%}
+	"os"
+	"strings"
 
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
 {% if cookiecutter.database_choice == 'postgres' -%}
@@ -36,6 +40,25 @@ import (
 
 // maxWorkers bounds how many jobs run concurrently in this process.
 const maxWorkers = 10
+
+// clientID names this process to River. River's own default appends a
+// microsecond timestamp to the hostname, which is unique but unreadable on
+// every line that carries it. Uniqueness per running process is the part that
+// matters — River elects its leader by this value — so the timestamp becomes
+// four bytes of entropy and the host keeps only its first label.
+func clientID() string {
+	host, _ := os.Hostname()
+	host, _, _ = strings.Cut(host, ".")
+	if host == "" {
+		host = "{{ cookiecutter.cmd_name.strip() }}"
+	}
+
+	var suffix [4]byte
+	// Documented never to fail as of Go 1.24.
+	_, _ = rand.Read(suffix[:])
+
+	return host + "-" + hex.EncodeToString(suffix[:])
+}
 
 type Client struct {
 {% if cookiecutter.database_choice == 'postgres' -%}
@@ -116,6 +139,7 @@ func NewClient(
 	river.AddWorker(workers, &ExampleWorker{})
 
 	rc, err := river.NewClient(driver, &river.Config{
+		ID: clientID(),
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: maxWorkers},
 		},

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
@@ -95,6 +96,25 @@ func TestSlogHandler_HandleFallsBackToRequestID(t *testing.T) {
 				t.Errorf("trace_id = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// The console handler prints one line per record, so a source location on
+// every one crowds out the message it belongs to. Deployments read the JSON
+// handler, which never carried a source location either.
+func TestSetupLoggerConsoleOmitsSourceLocation(t *testing.T) {
+	var buf bytes.Buffer
+	cfg := &config.Conf{}
+	cfg.AppConf.LogLevel = slog.LevelInfo
+
+	SetupLogger(cfg, WithOutput(&buf)).Info("hello")
+
+	out := buf.String()
+	if !strings.Contains(out, "hello") {
+		t.Fatalf("message missing from console output: %q", out)
+	}
+	if strings.Contains(out, ".go:") {
+		t.Errorf("console output carries a source location: %q", out)
 	}
 }
 

@@ -51,7 +51,7 @@ uvx cookiecutter gh:danielmichaels/go-web-app
 [7]  database_choice        postgres or sqlite
 [8]  ci_choice              github / woodpecker / none
 [9]  api_only               true drops the whole HTML layer
-[10] use_tailwind           Tailwind v4 instead of the hand-written CSS
+[10] use_tailwind           Tailwind v4 instead of the inline hand-written CSS
 [11] use_pwa                manifest.json + service worker
 [12] use_nats               Include NATS messaging support
 [13] embed_nats             Run NATS server in-process (needs use_nats)

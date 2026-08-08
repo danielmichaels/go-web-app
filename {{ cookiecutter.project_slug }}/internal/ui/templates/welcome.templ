@@ -1,0 +1,122 @@
+package templates
+
+// Welcome is the first-run tour. It is deliberately a page of its own rather
+// than the index: it explains a project that has not been written yet, so it
+// should be deletable in one commit without touching the route anyone builds
+// on.
+templ Welcome(v WelcomeView) {
+	@Layout(v.Title) {
+		<section class={ classSection }>
+			<span class={ classEyebrow }>welcome</span>
+			<h1 class={ classTitle }>Your app is running</h1>
+			<p class={ classLead }>
+				{{ cookiecutter.project_description }}
+			</p>
+		</section>
+		<section class={ classSection }>
+			<h2 class={ classSubtitle }>What was scaffolded</h2>
+			<div class={ classGrid }>
+				for _, f := range v.Features {
+					@featureCard(f)
+				}
+			</div>
+		</section>
+		<section class={ classSection }>
+			<h2 class={ classSubtitle }>Datastar, in the three modes it offers</h2>
+			<p class={ classLead }>
+				Every interaction below is server-rendered HTML and declarative
+				attributes. There is no client-side build and no JSON to parse.
+			</p>
+			<div class={ classGrid }>
+				@signalsDemo()
+				@streamDemo()
+			</div>
+			@patchDemo(v.Items)
+		</section>
+		<section class={ classSection }>
+			<p class={ classCardBody }>
+				This page is <code>internal/ui/templates/welcome.templ</code> and
+				its two handlers. Delete both when it has done its job — nothing
+				else references them.
+			</p>
+		</section>
+	}
+}
+
+templ featureCard(f FeatureView) {
+	<article class={ classCard }>
+		<div class={ classCardHead }>
+			<h3 class={ classCardName }>{ f.Name }</h3>
+			<span class={ classTag }>{ f.Tag }</span>
+		</div>
+		<p class={ classCardBody }>{ f.Body }</p>
+		if f.Href != "" {
+			<a class={ classCardLink } href={ templ.SafeURL(f.Href) }>{ f.Href }</a>
+		}
+	</article>
+}
+
+// signalsDemo never talks to the server: the signal is declared, bound to the
+// input and read back, all in the browser.
+templ signalsDemo() {
+	<article class={ classCard } data-signals="{name: ''}">
+		<div class={ classCardHead }>
+			<h3 class={ classCardName }>State in the browser</h3>
+			<span class={ classTag }>data-bind:</span>
+		</div>
+		<p class={ classCardBody }>
+			Typing updates the line below with no request at all. Signals hold
+			the state that only the browser cares about.
+		</p>
+		<input class={ classInputFull } type="text" aria-label="Your name" placeholder="your name" data-bind:name/>
+		<p class={ classCardBody } data-text="`Hello, ${$name.trim() || 'stranger'}.`">Hello, stranger.</p>
+	</article>
+}
+
+// streamDemo opens a long-lived SSE connection on init. The server pushes a
+// clock it renders itself, so a stalled stream shows as a stopped clock rather
+// than having to be inferred.
+templ streamDemo() {
+	<article class={ classCard } data-init="@get('/app/stream')">
+		<div class={ classCardHead }>
+			<h3 class={ classCardName }>State pushed from the server</h3>
+			<span class={ classTag }>data-init</span>
+		</div>
+		<p class={ classCardBody }>
+			One connection stays open and the server sends new HTML down it. The
+			browser polls nothing.
+		</p>
+		@Pulse(PulseView{})
+	</article>
+}
+
+// Pulse is patched over its previous self by the stream handler, so rendering
+// it standalone must produce the same markup as rendering it here.
+templ Pulse(v PulseView) {
+	<p id="pulse" class={ classCardBody }>
+		if v.Clock == "" {
+			Connecting&hellip;
+		} else {
+			<span class={ classDot }></span>
+			{ v.Clock } &middot; { v.Updates() } over one connection
+		}
+	</p>
+}
+
+// patchDemo is the real example feature, not a copy of it: the same components
+// the home page renders, patched by the same handler.
+templ patchDemo(items []ExampleView) {
+	<article class={ classCard }>
+		<div class={ classCardHead }>
+			<h3 class={ classCardName }>HTML patched in place</h3>
+			<span class={ classTag }>{ "@post" }</span>
+		</div>
+		<p class={ classCardBody }>
+			Submitting posts the form and gets one element back, which replaces
+			only itself. The counter and the button state above it are signals;
+			the list below is server-rendered HTML.
+		</p>
+		@ExampleForm()
+		@ExampleList(items, "")
+	</article>
+}
