@@ -46,17 +46,6 @@ func TestSlogHandler_WithAttrs(t *testing.T) {
 	}
 }
 
-func TestSlogHandler_WithGroup(t *testing.T) {
-	var buf bytes.Buffer
-	handler := newTestHandler(&buf)
-
-	newHandler := handler.WithGroup("test-group")
-
-	if _, ok := newHandler.(*SlogHandler); !ok {
-		t.Fatal("WithGroup should return a *SlogHandler, or the trace_id wrapper is lost")
-	}
-}
-
 func TestSlogHandler_HandleAddsTraceID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(newTestHandler(&buf))

@@ -66,6 +66,23 @@ func TraceID(ctx context.Context) string {
 // request that caused it.
 type SlogHandler struct {
 	inner slog.Handler
+	// ungrouped is inner as it stood before the first WithGroup, and ops
+	// replays everything applied since. Both stay nil until a group is opened,
+	// so the usual case never pays for them.
+	ungrouped slog.Handler
+	ops       []handlerOp
+}
+
+// handlerOp replays one WithAttrs or WithGroup call onto a different handler.
+type handlerOp func(slog.Handler) slog.Handler
+
+func cloneOps(ops []handlerOp) []handlerOp {
+	if len(ops) == 0 {
+		return nil
+	}
+	out := make([]handlerOp, len(ops), len(ops)+1)
+	copy(out, ops)
+	return out
 }
 
 func (h *SlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -83,21 +100,56 @@ func (h *SlogHandler) Handle(ctx context.Context, r slog.Record) error {
 	if traceID == "" {
 		traceID = middleware.GetReqID(ctx)
 	}
-	if traceID != "" {
+	if traceID == "" {
+		return h.inner.Handle(ctx, r)
+	}
+
+	attr := slog.String("trace_id", traceID)
+	if h.ungrouped == nil {
 		// Cloned because AddAttrs can append into a backing array the caller
 		// still shares, which would corrupt a sibling handler's copy.
 		r = r.Clone()
-		r.AddAttrs(slog.String("trace_id", traceID))
+		r.AddAttrs(attr)
+		return h.inner.Handle(ctx, r)
 	}
-	return h.inner.Handle(ctx, r)
+
+	// With a group open the attr cannot go on the record: it would land inside
+	// the group, and a search for a trace id would miss every line logged
+	// through a grouped logger. Apply it ahead of the first group instead.
+	target := h.ungrouped.WithAttrs([]slog.Attr{attr})
+	for _, op := range h.ops {
+		target = op(target)
+	}
+	return target.Handle(ctx, r)
 }
 
 func (h *SlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &SlogHandler{inner: h.inner.WithAttrs(attrs)}
+	if len(attrs) == 0 {
+		return h
+	}
+	n := &SlogHandler{inner: h.inner.WithAttrs(attrs), ungrouped: h.ungrouped}
+	if n.ungrouped != nil {
+		n.ops = append(cloneOps(h.ops), func(x slog.Handler) slog.Handler {
+			return x.WithAttrs(attrs)
+		})
+	}
+	return n
 }
 
 func (h *SlogHandler) WithGroup(name string) slog.Handler {
-	return &SlogHandler{inner: h.inner.WithGroup(name)}
+	if name == "" {
+		return h
+	}
+	n := &SlogHandler{inner: h.inner.WithGroup(name), ungrouped: h.ungrouped, ops: cloneOps(h.ops)}
+	if n.ungrouped == nil {
+		// Everything so far belongs to the handler this group opens on, so
+		// there is nothing to replay yet.
+		n.ungrouped, n.ops = h.inner, nil
+	}
+	n.ops = append(n.ops, func(x slog.Handler) slog.Handler {
+		return x.WithGroup(name)
+	})
+	return n
 }
 
 // unmatchedRoute reports whether ctx belongs to a request that reached the mux
