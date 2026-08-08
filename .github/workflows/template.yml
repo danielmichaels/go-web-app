@@ -26,10 +26,13 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       names: ${{ steps.list.outputs.names }}
+      test_names: ${{ steps.list.outputs.test_names }}
     steps:
       - uses: actions/checkout@v4
       - id: list
-        run: echo "names=$(./scripts/check-matrix.sh --list)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "names=$(./scripts/check-matrix.sh --list)" >> "$GITHUB_OUTPUT"
+          echo "test_names=$(./scripts/check-matrix.sh --list-tests)" >> "$GITHUB_OUTPUT"
 
   generate:
     needs: combos
@@ -103,17 +106,95 @@ jobs:
           COMBO: ${{ matrix.combo }}
         run: ./scripts/check-matrix.sh "$COMBO"
 
+  # Building a project proves it compiles, which says nothing about what it
+  # does. These run the generated project's own suite: trace_id propagation,
+  # CSRF actually refusing a cross-origin post, and the embedded-Postgres
+  # guards against adopting another project's database.
+  #
+  # Postgres combinations only — internal/server and internal/store are
+  # Postgres-only in the template, so a SQLite project's suite covers little
+  # the others do not.
+  test:
+    needs: combos
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: ${{ fromJson(needs.combos.outputs.test_names) }}
+    name: test (${{ matrix.combo }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: goversion
+        run: |
+          version=$(grep -m1 '^go ' '{{ cookiecutter.project_slug }}/go.mod' | awk '{print $2}')
+          case "$version" in
+            [0-9]*.[0-9]*) ;;
+            *) echo "unexpected go directive: '$version'" >&2; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.goversion.outputs.version }}
+          cache: false
+
+      - name: Cache Go modules and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: gomod-${{ runner.os }}-${{ steps.goversion.outputs.version }}-${{ hashFiles('**/go.mod') }}
+          restore-keys: gomod-${{ runner.os }}-${{ steps.goversion.outputs.version }}-
+
+      # Postgres is downloaded and extracted on first use, then reused. Without
+      # this every job pays for the download again.
+      - name: Cache embedded Postgres
+        uses: actions/cache@v4
+        with:
+          path: ~/.embedded-postgres-go
+          key: embedded-postgres-${{ runner.os }}-v16
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install task and sqlc
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+      - name: Install tailwindcss
+        run: |
+          curl -fsSL -o /usr/local/bin/tailwindcss \
+            https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64
+          chmod +x /usr/local/bin/tailwindcss
+
+      # -race only where it is worth the wall clock: on the branch that ships.
+      - name: Generate and test
+        env:
+          COMBO: ${{ matrix.combo }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_TESTS: "1"
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            GO_TEST_FLAGS=-race ./scripts/check-matrix.sh "$COMBO"
+          else
+            ./scripts/check-matrix.sh "$COMBO"
+          fi
+
   # A branch protection rule can require this one check instead of naming every
   # combination, so adding a combination does not need the rule updated.
   matrix-passed:
     if: always()
-    needs: generate
+    needs: [generate, test]
     runs-on: ubuntu-24.04
     steps:
       - env:
-          RESULT: ${{ needs.generate.result }}
+          GENERATE: ${{ needs.generate.result }}
+          TEST: ${{ needs.test.result }}
         run: |
-          if [ "$RESULT" != "success" ]; then
-            echo "one or more combinations failed: $RESULT"
+          echo "generate: $GENERATE"
+          echo "test:     $TEST"
+          if [ "$GENERATE" != "success" ] || [ "$TEST" != "success" ]; then
             exit 1
           fi

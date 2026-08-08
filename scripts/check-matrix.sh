@@ -8,9 +8,15 @@
 # outside internal/ui has to be guarded against it too. Those pairings only
 # break at generation time, which no Go test can reach.
 #
-#   ./scripts/check-matrix.sh            # every combination below
-#   ./scripts/check-matrix.sh api-only   # one combination, named exactly
-#   ./scripts/check-matrix.sh --list     # names as JSON, for the CI matrix
+#   ./scripts/check-matrix.sh              # every combination below
+#   ./scripts/check-matrix.sh api-only     # one combination, named exactly
+#   ./scripts/check-matrix.sh --list       # names as JSON, for the CI matrix
+#   ./scripts/check-matrix.sh --list-tests # names worth running tests against
+#
+# RUN_TESTS=1 also runs the generated project's own suite, and GO_TEST_FLAGS
+# passes through to it:
+#
+#   RUN_TESTS=1 GO_TEST_FLAGS=-race ./scripts/check-matrix.sh defaults
 #
 set -uo pipefail
 
@@ -28,16 +34,47 @@ COMBOS=(
   "no-river|use_river=false use_nats=true"
 )
 
-# The workflow builds its matrix from this, so the combination list lives here
-# and nowhere else.
-if [[ "$WANTED" == "--list" ]]; then
-  sep=""
+# Combinations worth running the generated test suite against, with RUN_TESTS=1.
+#
+# Postgres only, and not all of it. internal/server and internal/store are
+# Postgres-only in the template, so a SQLite project's suite is just config,
+# jobs and logging — little that the other entries do not already cover. And
+# tailwind-ui compiles the same Go as defaults, differing only in CSS, so its
+# suite would be identical.
+TEST_COMBOS=(defaults api-only no-river)
+
+emit_json() {
+  local sep="" item
   printf '['
-  for combo in "${COMBOS[@]}"; do
-    printf '%s"%s"' "$sep" "${combo%%|*}"
+  for item in "$@"; do
+    printf '%s"%s"' "$sep" "$item"
     sep=","
   done
   printf ']\n'
+}
+
+# A name in TEST_COMBOS that no longer exists in COMBOS would hand the workflow
+# a matrix entry nothing can run. Checked before the listing flags below, not
+# after: those exit early, and they are what CI calls.
+for wanted_test in "${TEST_COMBOS[@]}"; do
+  found=false
+  for combo in "${COMBOS[@]}"; do
+    [[ "${combo%%|*}" == "$wanted_test" ]] && found=true
+  done
+  if [[ "$found" == false ]]; then
+    echo "TEST_COMBOS names '$wanted_test', which is not in COMBOS" >&2
+    exit 2
+  fi
+done
+
+# The workflow builds its matrices from these, so the lists live here and
+# nowhere else.
+if [[ "$WANTED" == "--list" ]]; then
+  emit_json "${COMBOS[@]%%|*}"
+  exit 0
+fi
+if [[ "$WANTED" == "--list-tests" ]]; then
+  emit_json "${TEST_COMBOS[@]}"
   exit 0
 fi
 
@@ -87,11 +124,17 @@ for combo in "${COMBOS[@]}"; do
     # chosen options removed. Running the steps by hand skips exactly that.
     task init || exit 1
     go build ./... || exit 1
+    # go build does not compile _test.go files, so a test file that does not
+    # even parse would pass everything above. go vet does compile them.
+    go vet ./... || exit 1
     test -z "$(gofmt -l . | grep -v _templ.go)" || {
       echo "gofmt reported files"
       gofmt -l . | grep -v _templ.go
       exit 1
     }
+    if [[ "${RUN_TESTS:-}" == "1" ]]; then
+      go test ${GO_TEST_FLAGS:-} ./... || exit 1
+    fi
   ) >"$log" 2>&1
 
   if [[ $? -eq 0 ]]; then
