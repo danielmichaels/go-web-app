@@ -31,7 +31,7 @@ vars:
       # what only generated code imports.
       - task: tidy
 {% endraw %}{% if not cookiecutter.api_only %}      - task: templ
-{% endif %}{% if cookiecutter.use_tailwind %}      - task: css
+{% endif %}{% if cookiecutter.use_tailwind and not cookiecutter.api_only %}      - task: css
 {% endif %}{% raw %}      - task: sqlc
       - task: tidy
 
@@ -65,9 +65,16 @@ vars:
       - go tool templ generate {{.CLI_ARGS}}
 {% endraw %}
 {%- endif %}
-{%- if cookiecutter.use_tailwind %}
+{%- if cookiecutter.use_tailwind and not cookiecutter.api_only %}
 {% raw %}  css:
     desc: Compile Tailwind CSS into the embedded static tree
+    preconditions:
+      # Without this the output file is never written, the layout's stylesheet
+      # link 404s, and every page renders with no styling at all.
+      - sh: command -v tailwindcss
+        msg: |
+          tailwindcss not found on PATH. It is a standalone binary, not a Go
+          tool: https://tailwindcss.com/blog/standalone-cli
     cmds:
       - tailwindcss -i ./assets/css/input.css -o ./assets/static/css/main.css --minify
 
@@ -208,6 +215,6 @@ vars:
       - go install github.com/dkorunic/betteralign/cmd/betteralign@latest
       - go install mvdan.cc/gofumpt@latest
       - go install github.com/danielgtaylor/restish@latest
-{% endraw %}{% if cookiecutter.use_tailwind %}      # tailwindcss is a standalone binary, not a Go tool:
+{% endraw %}{% if cookiecutter.use_tailwind and not cookiecutter.api_only %}      # tailwindcss is a standalone binary, not a Go tool:
       # https://tailwindcss.com/blog/standalone-cli
 {% endif %}

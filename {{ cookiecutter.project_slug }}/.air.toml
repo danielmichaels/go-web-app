@@ -5,7 +5,7 @@ tmp_dir = "tmp"
 [build]
 bin = "./tmp/main"
 args_bin = ["serve"]
-{% if cookiecutter.api_only and not cookiecutter.use_tailwind -%}
+{% if cookiecutter.api_only -%}
 cmd = "go build -o ./tmp/main ./cmd/{{ cookiecutter.cmd_name.strip() }}"
 {% elif cookiecutter.use_tailwind -%}
 cmd = "go tool templ generate && tailwindcss -i ./assets/css/input.css -o ./assets/static/css/main.css && go build -o ./tmp/main ./cmd/{{ cookiecutter.cmd_name.strip() }}"

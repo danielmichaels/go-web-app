@@ -180,6 +180,10 @@ func SetupLogger(cfg *config.Conf, opts ...Option) *slog.Logger {
 		// blanks TimeFormat and the output loses its timestamps.
 		colorOpts := *slogcolor.DefaultOptions
 		colorOpts.Level = cfg.AppConf.LogLevel
+		// The caller's file and line describe where a record was written, not
+		// what happened. On the access log that is always the middleware, so
+		// every request line spends space on the same useless location.
+		colorOpts.SrcFileMode = slogcolor.Nop
 		handler = slogcolor.NewHandler(o.out, &colorOpts)
 	}
 	return slog.New(&SlogHandler{inner: handler})
