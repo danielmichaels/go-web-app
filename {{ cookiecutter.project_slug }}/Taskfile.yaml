@@ -26,6 +26,10 @@ vars:
   init:
     desc: Generate code and tidy modules. Run this once after generating the project.
     cmds:
+      # tidy first: `go tool templ` resolves the generator through the module
+      # graph, and the template ships no go.sum. The trailing tidy then picks up
+      # what only generated code imports.
+      - task: tidy
 {% endraw %}{% if not cookiecutter.api_only %}      - task: templ
 {% endif %}{% if cookiecutter.use_tailwind %}      - task: css
 {% endif %}{% raw %}      - task: sqlc
