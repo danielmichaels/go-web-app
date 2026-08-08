@@ -72,9 +72,9 @@ func TestSlogHandler_HandleAddsTraceID(t *testing.T) {
 // across a service boundary is not silently replaced by a per-request one.
 func TestSlogHandler_HandleFallsBackToRequestID(t *testing.T) {
 	tests := []struct {
-		name  string
-		ctx   func() context.Context
-		want  any
+		name string
+		ctx  func() context.Context
+		want any
 	}{
 		{
 			name: "request id only",
@@ -124,8 +124,8 @@ func TestSetupLoggerJSONHonoursLevel(t *testing.T) {
 
 	logger.WarnContext(WithTraceID(context.Background(), "t-2"), "kept")
 	entry := decode(t, &buf)
-	if entry["msg"] != "kept" {
-		t.Errorf("msg = %v, want kept", entry["msg"])
+	if entry["body"] != "kept" {
+		t.Errorf("body = %v, want kept — SetupLogger must install the schema", entry["body"])
 	}
 	if entry["trace_id"] != "t-2" {
 		t.Errorf("trace_id = %v, want t-2 — SetupLogger must wrap with SlogHandler", entry["trace_id"])
