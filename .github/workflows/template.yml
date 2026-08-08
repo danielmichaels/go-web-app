@@ -175,6 +175,9 @@ jobs:
           COMBO: ${{ matrix.combo }}
           EVENT_NAME: ${{ github.event_name }}
           RUN_TESTS: "1"
+          # Otherwise a passing run logs one word, and there is no way to tell
+          # from CI whether the suite ran.
+          VERBOSE: "1"
         run: |
           if [ "$EVENT_NAME" = "push" ]; then
             GO_TEST_FLAGS=-race ./scripts/check-matrix.sh "$COMBO"

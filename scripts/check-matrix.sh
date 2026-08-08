@@ -13,10 +13,11 @@
 #   ./scripts/check-matrix.sh --list       # names as JSON, for the CI matrix
 #   ./scripts/check-matrix.sh --list-tests # names worth running tests against
 #
-# RUN_TESTS=1 also runs the generated project's own suite, and GO_TEST_FLAGS
-# passes through to it:
+# RUN_TESTS=1 also runs the generated project's own suite, GO_TEST_FLAGS passes
+# through to it, and VERBOSE=1 streams the output instead of only reporting it
+# on failure:
 #
-#   RUN_TESTS=1 GO_TEST_FLAGS=-race ./scripts/check-matrix.sh defaults
+#   RUN_TESTS=1 VERBOSE=1 GO_TEST_FLAGS=-race ./scripts/check-matrix.sh defaults
 #
 set -uo pipefail
 
@@ -99,6 +100,33 @@ pass=0
 fail=0
 failed_names=()
 
+# Returns rather than exits: this runs inside a subshell below, and an exit
+# here would take the whole run with it.
+run_combo() {
+  local name="$1" args="$2" out="$3"
+
+  # shellcheck disable=SC2086
+  uvx cookiecutter "$REPO" --no-input --output-dir "$out" project_name="$name" $args || return 1
+  cd "$out/$name" || return 1
+
+  # `task init` itself, not a reimplementation of its steps: the failure this
+  # guards against is init referencing a task, or an input file, that the
+  # chosen options removed. Running the steps by hand skips exactly that.
+  task init || return 1
+  go build ./... || return 1
+  # go build does not compile _test.go files, so a test file that does not even
+  # parse would pass everything above. go vet does compile them.
+  go vet ./... || return 1
+  test -z "$(gofmt -l . | grep -v _templ.go)" || {
+    echo "gofmt reported files"
+    gofmt -l . | grep -v _templ.go
+    return 1
+  }
+  if [[ "${RUN_TESTS:-}" == "1" ]]; then
+    go test ${GO_TEST_FLAGS:-} ./... || return 1
+  fi
+}
+
 for combo in "${COMBOS[@]}"; do
   name="${combo%%|*}"
   args="${combo#*|}"
@@ -109,40 +137,29 @@ for combo in "${COMBOS[@]}"; do
 
   out="$WORK/$name"
   mkdir -p "$out"
-  printf '%-24s ' "$name"
-
   log="$WORK/$name.log"
-  # A subshell, not a { } group: a group runs in this shell, so the first
-  # combination to fail would exit the whole run and report nothing.
-  (
-    # shellcheck disable=SC2086
-    uvx cookiecutter "$REPO" --no-input --output-dir "$out" project_name="$name" $args || exit 1
-    cd "$out/$name" || exit 1
 
-    # `task init` itself, not a reimplementation of its steps: the failure this
-    # guards against is init referencing a task, or an input file, that the
-    # chosen options removed. Running the steps by hand skips exactly that.
-    task init || exit 1
-    go build ./... || exit 1
-    # go build does not compile _test.go files, so a test file that does not
-    # even parse would pass everything above. go vet does compile them.
-    go vet ./... || exit 1
-    test -z "$(gofmt -l . | grep -v _templ.go)" || {
-      echo "gofmt reported files"
-      gofmt -l . | grep -v _templ.go
-      exit 1
-    }
-    if [[ "${RUN_TESTS:-}" == "1" ]]; then
-      go test ${GO_TEST_FLAGS:-} ./... || exit 1
-    fi
-  ) >"$log" 2>&1
+  # VERBOSE=1 streams as well as captures. A passing run otherwise prints one
+  # word, which is fine for a build sweep but leaves a test run unauditable —
+  # there is no way to tell from the output whether the suite ran at all.
+  if [[ "${VERBOSE:-}" == "1" ]]; then
+    echo "=== $name ==="
+    (run_combo "$name" "$args" "$out") 2>&1 | tee "$log" | sed 's/^/    /'
+    status=${PIPESTATUS[0]}
+  else
+    printf '%-24s ' "$name"
+    (run_combo "$name" "$args" "$out") >"$log" 2>&1
+    status=$?
+  fi
 
-  if [[ $? -eq 0 ]]; then
+  if [[ $status -eq 0 ]]; then
+    [[ "${VERBOSE:-}" == "1" ]] && printf '%-24s ' "$name"
     echo "ok"
     pass=$((pass + 1))
   else
+    [[ "${VERBOSE:-}" == "1" ]] && printf '%-24s ' "$name"
     echo "FAIL"
-    sed 's/^/    /' "$log" | tail -15
+    [[ "${VERBOSE:-}" != "1" ]] && sed 's/^/    /' "$log" | tail -15
     fail=$((fail + 1))
     failed_names+=("$name")
   fi
