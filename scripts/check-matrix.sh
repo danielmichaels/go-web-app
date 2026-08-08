@@ -9,14 +9,13 @@
 # break at generation time, which no Go test can reach.
 #
 #   ./scripts/check-matrix.sh            # every combination below
-#   ./scripts/check-matrix.sh api-only   # only combinations whose name matches
+#   ./scripts/check-matrix.sh api-only   # one combination, named exactly
+#   ./scripts/check-matrix.sh --list     # names as JSON, for the CI matrix
 #
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK="$(mktemp -d)"
-FILTER="${1:-}"
-trap 'rm -rf "$WORK"' EXIT
+WANTED="${1:-}"
 
 # name | extra cookiecutter args. The defaults cover postgres + github + full UI.
 COMBOS=(
@@ -29,6 +28,36 @@ COMBOS=(
   "no-river|use_river=false use_nats=true"
 )
 
+# The workflow builds its matrix from this, so the combination list lives here
+# and nowhere else.
+if [[ "$WANTED" == "--list" ]]; then
+  sep=""
+  printf '['
+  for combo in "${COMBOS[@]}"; do
+    printf '%s"%s"' "$sep" "${combo%%|*}"
+    sep=","
+  done
+  printf ']\n'
+  exit 0
+fi
+
+# Matching is exact, and an unknown name is an error rather than a run of
+# nothing: a typo that selects no combinations would otherwise report success.
+if [[ -n "$WANTED" ]]; then
+  known=false
+  for combo in "${COMBOS[@]}"; do
+    [[ "${combo%%|*}" == "$WANTED" ]] && known=true
+  done
+  if [[ "$known" == false ]]; then
+    echo "unknown combination: $WANTED" >&2
+    echo "known: $(printf '%s ' "${COMBOS[@]%%|*}")" >&2
+    exit 2
+  fi
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
 pass=0
 fail=0
 failed_names=()
@@ -37,7 +66,7 @@ for combo in "${COMBOS[@]}"; do
   name="${combo%%|*}"
   args="${combo#*|}"
 
-  if [[ -n "$FILTER" && "$name" != *"$FILTER"* ]]; then
+  if [[ -n "$WANTED" && "$name" != "$WANTED" ]]; then
     continue
   fi
 
