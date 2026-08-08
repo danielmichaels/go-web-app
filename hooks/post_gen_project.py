@@ -134,6 +134,18 @@ def handle_web_ui():
     """
     if API_ONLY:
         remove("internal/ui", "assets/static", "assets/css")
+        # Say so rather than leaving the answer to look accepted: both options
+        # only ever apply to the HTML layer that api_only just removed.
+        ignored = [
+            name
+            for name, chosen in (("use_tailwind", USE_TAILWIND), ("use_pwa", USE_PWA))
+            if chosen
+        ]
+        if ignored:
+            print(
+                f"note: api_only drops the HTML layer, so {' and '.join(ignored)} "
+                "had nothing to apply to and was ignored."
+            )
         return
 
     # Neither build serves a stylesheet from the tree as committed: Tailwind

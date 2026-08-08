@@ -20,7 +20,7 @@ Tooling used by those tasks: [task](https://taskfile.dev),
 [air](https://github.com/air-verse/air), [sqlc](https://sqlc.dev) and
 [goose](https://github.com/pressly/goose). Install them with
 `task install_bins`.
-{% if cookiecutter.use_tailwind %}
+{% if cookiecutter.api_only %}{% elif cookiecutter.use_tailwind %}
 Tailwind is a standalone binary and is not installed by that task — see the
 [Tailwind CLI docs](https://tailwindcss.com/blog/standalone-cli). Until it is
 on `PATH` and `task css` has run, `assets/static/css/main.css` does not exist

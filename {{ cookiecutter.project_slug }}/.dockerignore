@@ -18,7 +18,7 @@ dist
 
 # Generated: the builder stage produces these itself.
 *_templ.go
-{% if cookiecutter.use_tailwind -%}
+{% if cookiecutter.use_tailwind and not cookiecutter.api_only -%}
 assets/static/css/main.css
 {% endif -%}
 
