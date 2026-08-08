@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import textwrap
 import zlib
 from pathlib import Path
@@ -165,6 +166,24 @@ def prune_empty_dirs():
             target.rmdir()
 
 
+def format_go_sources():
+    """Format the rendered Go sources.
+
+    Struct field alignment and import order both depend on which conditional
+    blocks fired, so no template can be written that is correct for every
+    combination of options. Formatting after rendering is the only way to get
+    them right, and without it a fresh project fails its own `task audit`.
+    """
+    gofmt = shutil.which("gofmt")
+    if gofmt is None:
+        print("post_gen: gofmt not on PATH; generated sources left unformatted")
+        return
+
+    result = subprocess.run([gofmt, "-w", str(CWD)], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"post_gen: gofmt failed, sources left unformatted:\n{result.stderr}")
+
+
 def print_final_instructions():
     message = """
     ====================================================================================
@@ -198,6 +217,7 @@ runners = [
     handle_nats_package,
     handle_river_package,
     prune_empty_dirs,
+    format_go_sources,
     print_final_instructions,
 ]
 
