@@ -76,7 +76,7 @@ def database_choice():
     Litestream and keeps the shell entrypoint that wraps the process.
     """
     if DB_CHOICE == "postgres":
-        remove("database", "litestream.yml", "entrypoint")
+        remove("database", "litestream.yml", "entrypoint", "internal/store/sqlite_test.go")
     elif DB_CHOICE == "sqlite":
         remove(
             "internal/embeddedpg",
