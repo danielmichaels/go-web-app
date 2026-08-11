@@ -16,9 +16,7 @@ import (
 	"strings"
 
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
-{% if cookiecutter.database_choice == 'postgres' -%}
 	"{{ cookiecutter.go_module_path.strip() }}/internal/store"
-{% endif -%}
 
 {% if cookiecutter.database_choice == 'postgres' -%}
 	"github.com/jackc/pgx/v5"
@@ -91,7 +89,7 @@ func NewClient(
 	cfg *config.Conf,
 	log *slog.Logger,
 ) (*Client, error) {
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)")
+	db, err := sql.Open("sqlite", store.DSN(dbPath))
 	if err != nil {
 		return nil, err
 	}

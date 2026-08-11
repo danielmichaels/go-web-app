@@ -65,7 +65,7 @@ type dbConf struct {
 {% endif -%}
 
 type serverConf struct {
-	XApiKey      string        `env:"X_API_KEY,default=changeme"`
+	XApiKey      string        `env:"X_API_KEY,default="`
 	Port         int           `env:"SERVER_PORT,default=9898"`
 	TimeoutRead  time.Duration `env:"SERVER_TIMEOUT_READ,default=5s"`
 	TimeoutWrite time.Duration `env:"SERVER_TIMEOUT_WRITE,default=10s"`
@@ -180,8 +180,8 @@ func Load() (*Conf, error) {
 {% endif -%}
 
 	if c.IsProduction() {
-		if c.Server.XApiKey == "changeme" {
-			problems = append(problems, "X_API_KEY must be changed from its default in production")
+		if c.Server.XApiKey == "" {
+			problems = append(problems, "X_API_KEY must be set in production")
 		}
 {% if cookiecutter.database_choice == 'postgres' -%}
 		if c.Db.Embedded {

@@ -48,16 +48,29 @@ func NewDatabasePool(ctx context.Context, cfg *config.Conf) (*pgxpool.Pool, erro
 	return pgxpool.NewWithConfig(ctx, c)
 }
 {% else -%}
+// DSN turns a database file path into a SQLite connection string with the
+// pragmas required by the application's single-writer and Litestream model.
+// busy_timeout waits for the current writer instead of returning SQLITE_BUSY,
+// WAL permits readers during writes and is required for Litestream, and
+// foreign_keys makes SQLite enforce the same relational constraints callers
+// expect from the schema.
+func DSN(path string) string {
+	return path + "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+}
+
 func NewDatabasePool(ctx context.Context, cfg *config.Conf) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", cfg.Db.DbName)
+	db, err := sql.Open("sqlite", DSN(cfg.Db.DbName))
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err = db.PingContext(ctx); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	return db, nil

@@ -18,7 +18,10 @@ import (
 // config rather than the package-level loader so a test can supply its own.
 func (app *App) ApiKeyAuth(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		if ctx.Header("X-API-Key") != app.Conf.Server.XApiKey {
+		// Fail closed when the operator has not configured a key. Comparing an
+		// empty header with an empty configured value would otherwise authorize
+		// every request that omitted X-API-Key.
+		if app.Conf.Server.XApiKey == "" || ctx.Header("X-API-Key") != app.Conf.Server.XApiKey {
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "unauthorized")
 			return
 		}

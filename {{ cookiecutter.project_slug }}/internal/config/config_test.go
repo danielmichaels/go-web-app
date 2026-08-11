@@ -29,6 +29,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.IsProduction() {
 		t.Error("IsProduction() = true, want false: APP_ENV defaults to development")
 	}
+	if cfg.Server.XApiKey != "" {
+		t.Errorf("XApiKey = %q, want empty by default", cfg.Server.XApiKey)
+	}
 }
 
 // One pass should be enough to fix a misconfigured deployment, rather than one
@@ -37,7 +40,7 @@ func TestLoadReportsEveryProblemAtOnce(t *testing.T) {
 	setMinimalEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("SERVER_PORT", "70000")
-	// X_API_KEY is left at its default, which production rejects.
+	// X_API_KEY is left empty, which production rejects.
 
 	_, err := config.Load()
 	if err == nil {

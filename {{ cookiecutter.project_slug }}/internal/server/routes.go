@@ -31,7 +31,12 @@ import (
 func (app *App) Routes() http.Handler {
 	router := chi.NewMux()
 	router.Use(middleware.RequestID)
-	router.Use(middleware.RealIP)
+	// The template cannot know which reverse proxies a generated deployment
+	// trusts. Never infer a client IP from forwarded headers by default: those
+	// headers are client-controlled when the app is directly reachable. A
+	// deployment behind a proxy must replace this with a specifically trusted
+	// ClientIPFromHeader or ClientIPFromXFF configuration.
+	router.Use(middleware.ClientIPFromRemoteAddr)
 	// Recoverer sits outside the access log purely as a backstop for httplog
 	// itself: httplog recovers handler panics first and logs them with the
 	// request and a stack trace, which Recoverer alone cannot do.

@@ -97,7 +97,7 @@ func prepareMigrationDB(ctx context.Context, dsn string, logger *slog.Logger) (*
 	}
 
 {% endif -%}
-	db, err := sql.Open("{% if cookiecutter.database_choice == 'postgres' %}pgx{% else %}sqlite{% endif %}", dsn)
+	db, err := sql.Open("{% if cookiecutter.database_choice == 'postgres' %}pgx{% else %}sqlite{% endif %}", {% if cookiecutter.database_choice == 'postgres' %}dsn{% else %}DSN(dsn){% endif %})
 	if err != nil {
 		return nil, fmt.Errorf("store: open database for migrations: %w", err)
 	}
