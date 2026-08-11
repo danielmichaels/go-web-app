@@ -88,6 +88,24 @@ type sessionConf struct {
 	// Secure must be true anywhere the site is served over HTTPS.
 	Secure bool `env:"SESSION_COOKIE_SECURE,default=false"`
 }
+
+// originList is a comma-separated list of origins.
+//
+// It parses itself because envdecode splits a plain []string on semicolons,
+// which is not the separator anyone reaches for: a second origin written the
+// expected way became part of the first and was rejected as one unparseable
+// value. envdecode prefers a TextUnmarshaler over its own slice handling, so
+// declaring one is enough to take the decision back.
+type originList []string
+
+func (o *originList) UnmarshalText(text []byte) error {
+	for _, entry := range strings.Split(string(text), ",") {
+		if origin := strings.TrimSpace(entry); origin != "" {
+			*o = append(*o, origin)
+		}
+	}
+	return nil
+}
 {% endif -%}
 
 type appConf struct {
@@ -100,7 +118,7 @@ type appConf struct {
 {% if not cookiecutter.api_only -%}
 	// TrustedOrigins are the cross-origin sites allowed to submit to this app,
 	// as scheme://host (e.g. https://app.example.com).
-	TrustedOrigins []string `env:"TRUSTED_ORIGINS"`
+	TrustedOrigins originList `env:"TRUSTED_ORIGINS"`
 {% endif -%}
 {% if cookiecutter.use_river and not cookiecutter.api_only -%}
 	// RiverUIEnabled mounts the job dashboard inside this binary. It ships off
@@ -240,12 +258,6 @@ func Load() (*Conf, error) {
 	for _, origin := range c.AppConf.TrustedOrigins {
 		if err := csrf.AddTrustedOrigin(origin); err != nil {
 			problems = append(problems, fmt.Sprintf("TRUSTED_ORIGINS: %v", err))
-			if strings.Contains(origin, ",") {
-				problems = append(
-					problems,
-					"TRUSTED_ORIGINS separates entries with ';', not ','",
-				)
-			}
 		}
 	}
 {% endif -%}

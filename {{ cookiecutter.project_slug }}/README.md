@@ -179,7 +179,7 @@ missing resource still warns.
 Pages are [templ](https://templ.guide) templates updated in place by
 [Datastar](https://data-star.dev). Cross-origin writes are rejected by
 `http.CrossOriginProtection`; list any legitimate cross-origin callers in
-`TRUSTED_ORIGINS`, separated with `;` rather than `,`.
+`TRUSTED_ORIGINS`, comma separated.
 {% else %}
 ## HTTP surface
 

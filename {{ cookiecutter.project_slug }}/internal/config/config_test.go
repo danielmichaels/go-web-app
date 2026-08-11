@@ -116,30 +116,17 @@ func TestTrustedOriginsValidated(t *testing.T) {
 
 func TestTrustedOriginsAccepted(t *testing.T) {
 	setMinimalEnv(t)
-	t.Setenv("TRUSTED_ORIGINS", "https://a.example;https://b.example:8443;http://localhost:3000")
+	t.Setenv("TRUSTED_ORIGINS", "https://a.example, https://b.example:8443 ,http://localhost:3000")
 
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("valid origins rejected: %v", err)
 	}
 	if len(cfg.AppConf.TrustedOrigins) != 3 {
-		t.Errorf("TrustedOrigins = %v, want 3 entries", cfg.AppConf.TrustedOrigins)
+		t.Fatalf("TrustedOrigins = %v, want 3 entries", cfg.AppConf.TrustedOrigins)
 	}
-}
-
-// envdecode splits lists on semicolons while every neighbouring tool uses
-// commas, so the likely mistake is named instead of surfacing as one very long
-// unparseable origin.
-func TestTrustedOriginsNamesTheSeparator(t *testing.T) {
-	setMinimalEnv(t)
-	t.Setenv("TRUSTED_ORIGINS", "https://a.example,https://b.example")
-
-	_, err := config.Load()
-	if err == nil {
-		t.Fatal("comma-separated origins accepted, want rejected")
-	}
-	if !strings.Contains(err.Error(), "';'") {
-		t.Errorf("error does not point at the separator:\n%v", err)
+	if got := cfg.AppConf.TrustedOrigins[1]; got != "https://b.example:8443" {
+		t.Errorf("entry 1 = %q, want the surrounding space trimmed", got)
 	}
 }
 {% endif -%}

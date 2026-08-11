@@ -142,8 +142,7 @@ CSRF uses the standard library's `http.NewCrossOriginProtection` (Go 1.25+),
 which works from `Sec-Fetch-Site`/`Origin` rather than a synchronised token, so
 forms need no hidden field. Rejected requests are answered **404, not 403**, so
 a probe cannot use the status code to confirm a route exists. Cross-origin
-callers must be listed in `TRUSTED_ORIGINS`, separated with `;` rather than
-`,` — a comma is not a separator there and ends up inside the origin.
+callers must be listed in `TRUSTED_ORIGINS`, comma separated.
 
 ---
 
