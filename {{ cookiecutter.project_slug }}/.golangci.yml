@@ -8,3 +8,16 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+  settings:
+    errcheck:
+      # Close is excluded as a category rather than silenced at each call
+      # site. Every one here is a database handle, a listener or a response
+      # body, where the close error reports on work that has already
+      # finished and there is nothing left to do about it. Reinstate the
+      # check if something starts closing a file it just wrote, where a
+      # failed close does lose data.
+      exclude-functions:
+        - (io.Closer).Close
+        - (net.Listener).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Conn).Close

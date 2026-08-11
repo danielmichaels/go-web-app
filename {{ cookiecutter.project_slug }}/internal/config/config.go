@@ -250,6 +250,9 @@ func Load() (*Conf, error) {
 	}
 {% endif -%}
 
+{# Postgres and the UI supply every check inside this block, so a SQLite
+   api_only build would render it empty and trip staticcheck SA9003. #}
+{% if cookiecutter.database_choice == 'postgres' or not cookiecutter.api_only -%}
 	if c.IsProduction() {
 {% if cookiecutter.database_choice == 'postgres' -%}
 		if c.Db.Embedded {
@@ -268,6 +271,7 @@ func Load() (*Conf, error) {
 		}
 {% endif -%}
 	}
+{% endif -%}
 
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("config:\n  - %s", strings.Join(problems, "\n  - "))
