@@ -4,13 +4,14 @@ import (
 {% if not cookiecutter.api_only -%}
 	"io/fs"
 {% endif -%}
+	"fmt"
 	"net/http"
-	"strings"
 
 {% if not cookiecutter.api_only -%}
 	"{{ cookiecutter.go_module_path.strip() }}/assets"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/ui"
 {% endif -%}
+	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -143,20 +144,24 @@ func (app *App) humaConfig() huma.Config {
 // is directly reachable, and the default records only the peer that actually
 // opened the connection.
 //
-// Load has already rejected an unusable source, so the remaining arm is remote.
+// Neither panic can fire from configuration -- Load parses the same value
+// through the same function -- so either one means a mode was added there and
+// not here, which is worth a boot failure rather than silently downgrading to
+// the peer address.
 func (app *App) clientIPMiddleware() func(http.Handler) http.Handler {
-	mode, arg, _ := strings.Cut(app.Conf.Server.ClientIPSource, ":")
-	switch mode {
-	case "header":
-		return middleware.ClientIPFromHeader(arg)
-	case "xff":
-		prefixes := strings.Split(arg, ",")
-		for i, prefix := range prefixes {
-			prefixes[i] = strings.TrimSpace(prefix)
-		}
-		return middleware.ClientIPFromXFF(prefixes...)
-	default:
+	source, err := config.ParseClientIPSource(app.Conf.Server.ClientIPSource)
+	if err != nil {
+		panic(fmt.Sprintf("server: %v", err))
+	}
+	switch source.Mode {
+	case config.ClientIPRemote:
 		return middleware.ClientIPFromRemoteAddr
+	case config.ClientIPHeader:
+		return middleware.ClientIPFromHeader(source.Header)
+	case config.ClientIPXFF:
+		return middleware.ClientIPFromXFF(source.Prefixes...)
+	default:
+		panic(fmt.Sprintf("server: CLIENT_IP_SOURCE mode %q has no middleware", source.Mode))
 	}
 }
 

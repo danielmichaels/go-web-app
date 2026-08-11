@@ -4,6 +4,7 @@ import (
 {% if not cookiecutter.api_only -%}
 	"net/http"
 {% endif -%}
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -99,12 +100,22 @@ type sessionConf struct {
 type originList []string
 
 func (o *originList) UnmarshalText(text []byte) error {
-	for _, entry := range strings.Split(string(text), ",") {
-		if origin := strings.TrimSpace(entry); origin != "" {
-			*o = append(*o, origin)
+	*o = splitList(string(text))
+	return nil
+}
+
+// NewCrossOriginProtection builds the stdlib CSRF check, reporting the entries
+// it refused rather than failing on the first. Load and the server both build
+// it from here, so neither can accept an origin the other rejects.
+func NewCrossOriginProtection(origins []string) (*http.CrossOriginProtection, []string) {
+	p := http.NewCrossOriginProtection()
+	var problems []string
+	for _, origin := range origins {
+		if err := p.AddTrustedOrigin(origin); err != nil {
+			problems = append(problems, fmt.Sprintf("TRUSTED_ORIGINS: %v", err))
 		}
 	}
-	return nil
+	return p, problems
 }
 {% endif -%}
 
@@ -169,38 +180,76 @@ func riverUIPathProblem(path string) string {
 }
 
 {% endif -%}
-// clientIPSourceProblem returns the empty string when the source is usable.
+// splitList splits a comma-separated environment value, dropping surrounding
+// space and empty entries.
+func splitList(s string) []string {
+	var out []string
+	for _, entry := range strings.Split(s, ",") {
+		if v := strings.TrimSpace(entry); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// CLIENT_IP_SOURCE modes, spelled as they are written in the environment.
+const (
+	ClientIPRemote = "remote"
+	ClientIPHeader = "header"
+	ClientIPXFF    = "xff"
+)
+
+// ClientIPSource is CLIENT_IP_SOURCE parsed into the argument its middleware
+// needs. Only Mode is always set; Header and Prefixes belong to one mode each.
+type ClientIPSource struct {
+	Mode     string
+	Header   string
+	Prefixes []string
+}
+
+// ParseClientIPSource parses CLIENT_IP_SOURCE. Load reports the error beside
+// every other configuration problem and the router wires the result, so the
+// grammar is defined once and the two cannot drift.
 //
 // Prefixes are parsed here rather than left to chi, whose XFF middleware
 // builds them with netip.MustParsePrefix and would take the process down at
 // boot instead of reporting the typo.
-func clientIPSourceProblem(source string) string {
+func ParseClientIPSource(source string) (ClientIPSource, error) {
 	mode, arg, _ := strings.Cut(source, ":")
 	switch mode {
-	case "remote":
+	case ClientIPRemote:
 		if arg != "" {
-			return "CLIENT_IP_SOURCE=remote takes no argument"
+			return ClientIPSource{}, errors.New("CLIENT_IP_SOURCE=remote takes no argument")
 		}
-	case "header":
+		return ClientIPSource{Mode: mode}, nil
+	case ClientIPHeader:
 		if arg == "" {
-			return "CLIENT_IP_SOURCE=header needs a header name, e.g. header:X-Real-IP"
+			return ClientIPSource{}, errors.New(
+				"CLIENT_IP_SOURCE=header needs a header name, e.g. header:X-Real-IP",
+			)
 		}
-	case "xff":
-		if arg == "" {
-			return "CLIENT_IP_SOURCE=xff needs at least one trusted CIDR, e.g. xff:10.0.0.0/8"
+		return ClientIPSource{Mode: mode, Header: arg}, nil
+	case ClientIPXFF:
+		prefixes := splitList(arg)
+		if len(prefixes) == 0 {
+			return ClientIPSource{}, errors.New(
+				"CLIENT_IP_SOURCE=xff needs at least one trusted CIDR, e.g. xff:10.0.0.0/8",
+			)
 		}
-		for _, cidr := range strings.Split(arg, ",") {
-			if _, err := netip.ParsePrefix(strings.TrimSpace(cidr)); err != nil {
-				return fmt.Sprintf("CLIENT_IP_SOURCE has an unparseable CIDR %q", cidr)
+		for _, cidr := range prefixes {
+			if _, err := netip.ParsePrefix(cidr); err != nil {
+				return ClientIPSource{}, fmt.Errorf(
+					"CLIENT_IP_SOURCE has an unparseable CIDR %q",
+					cidr,
+				)
 			}
 		}
-	default:
-		return fmt.Sprintf(
-			"CLIENT_IP_SOURCE %q must be remote, header:<Name>, or xff:<cidr>[,<cidr>...]",
-			source,
-		)
+		return ClientIPSource{Mode: mode, Prefixes: prefixes}, nil
 	}
-	return ""
+	return ClientIPSource{}, fmt.Errorf(
+		"CLIENT_IP_SOURCE %q must be remote, header:<Name>, or xff:<cidr>[,<cidr>...]",
+		source,
+	)
 }
 
 // Load reads configuration from the environment.
@@ -230,8 +279,8 @@ func Load() (*Conf, error) {
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		problems = append(problems, "SERVER_PORT must be between 1 and 65535")
 	}
-	if problem := clientIPSourceProblem(c.Server.ClientIPSource); problem != "" {
-		problems = append(problems, problem)
+	if _, err := ParseClientIPSource(c.Server.ClientIPSource); err != nil {
+		problems = append(problems, err.Error())
 	}
 	if c.Server.MetricsPort < 1 || c.Server.MetricsPort > 65535 {
 		problems = append(problems, "METRICS_PORT must be between 1 and 65535")
@@ -251,37 +300,31 @@ func Load() (*Conf, error) {
 {% endif -%}
 
 {% if not cookiecutter.api_only -%}
-	// Checked here rather than where CrossOriginProtection is built, so a typo
-	// is reported beside every other problem instead of ending the process
-	// with a stack trace before anything has started.
-	csrf := http.NewCrossOriginProtection()
-	for _, origin := range c.AppConf.TrustedOrigins {
-		if err := csrf.AddTrustedOrigin(origin); err != nil {
-			problems = append(problems, fmt.Sprintf("TRUSTED_ORIGINS: %v", err))
-		}
-	}
+	// Built here as well as where it is used, so a typo is reported beside
+	// every other problem instead of ending the process with a stack trace
+	// before anything has started.
+	_, originProblems := NewCrossOriginProtection(c.AppConf.TrustedOrigins)
+	problems = append(problems, originProblems...)
 {% endif -%}
 
-{# Postgres and the UI supply every check inside this block, so a SQLite
-   api_only build would render it empty and trip staticcheck SA9003. #}
-{% if cookiecutter.database_choice == 'postgres' or not cookiecutter.api_only -%}
-	if c.IsProduction() {
+{# Each check guards itself. One shared `if c.IsProduction()` would render
+   empty for a SQLite api_only build -- staticcheck SA9003 -- and its Jinja
+   condition would be a second copy of the guards below, silently dropping any
+   later check that did not happen to match it. #}
 {% if cookiecutter.database_choice == 'postgres' -%}
-		if c.Db.Embedded {
-			problems = append(
-				problems,
-				"EMBEDDED_POSTGRES must be false in production; supply DATABASE_URL instead",
-			)
-		}
+	if c.IsProduction() && c.Db.Embedded {
+		problems = append(
+			problems,
+			"EMBEDDED_POSTGRES must be false in production; supply DATABASE_URL instead",
+		)
+	}
 {% endif -%}
 {% if not cookiecutter.api_only -%}
-		if len(c.AppConf.TrustedOrigins) == 0 {
-			problems = append(problems, "TRUSTED_ORIGINS must list at least one origin in production")
-		}
-		if !c.Session.Secure {
-			problems = append(problems, "SESSION_COOKIE_SECURE must be true in production")
-		}
-{% endif -%}
+	if c.IsProduction() && len(c.AppConf.TrustedOrigins) == 0 {
+		problems = append(problems, "TRUSTED_ORIGINS must list at least one origin in production")
+	}
+	if c.IsProduction() && !c.Session.Secure {
+		problems = append(problems, "SESSION_COOKIE_SECURE must be true in production")
 	}
 {% endif -%}
 

@@ -19,17 +19,14 @@ import (
 // config rather than the package-level loader so a test can supply its own.
 func (app *App) ApiKeyAuth(api huma.API) func(ctx huma.Context, next func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		// Fail closed when the operator has not configured a key. Comparing an
-		// empty header with an empty configured value would otherwise authorize
-		// every request that omitted X-API-Key.
+		// The empty check comes first because ConstantTimeCompare reports two
+		// empty slices as equal: without it an unconfigured key would
+		// authorize every request that omitted the header. The comparison
+		// itself is constant time so how long a rejection takes cannot tell
+		// the caller how much of the key they guessed correctly.
 		key := app.Conf.Server.XApiKey
-		if key == "" {
-			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		// Constant time: how long a rejection takes must not tell the caller
-		// how much of the key they guessed correctly.
-		if subtle.ConstantTimeCompare([]byte(ctx.Header("X-API-Key")), []byte(key)) != 1 {
+		if key == "" ||
+			subtle.ConstantTimeCompare([]byte(ctx.Header("X-API-Key")), []byte(key)) != 1 {
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "unauthorized")
 			return
 		}
