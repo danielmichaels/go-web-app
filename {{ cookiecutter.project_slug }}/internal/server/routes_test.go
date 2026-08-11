@@ -51,7 +51,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 func TestMonitoringEndpoints(t *testing.T) {
 	ts := newTestServer(t)
 
-	for _, path := range []string{"/healthz", "/version", "/metrics"} {
+	for _, path := range []string{"/healthz", "/version"} {
 		t.Run(path, func(t *testing.T) {
 			res, err := ts.Client().Get(ts.URL + path)
 			if err != nil {
@@ -61,16 +61,60 @@ func TestMonitoringEndpoints(t *testing.T) {
 			if res.StatusCode != http.StatusOK {
 				t.Errorf("status = %d, want 200", res.StatusCode)
 			}
-			if path == "/metrics" {
-				body, err := io.ReadAll(res.Body)
-				if err != nil {
-					t.Fatalf("read %s: %v", path, err)
-				}
-				if !strings.Contains(string(body), "go_goroutines") {
-					t.Error("/metrics does not expose Go runtime metrics")
-				}
+		})
+	}
+}
+
+// Metrics ride a listener of their own so the port carrying them can stay off
+// the public interface. Answering here would put process statistics and the
+// whole route table back in front of anyone who asks.
+func TestMetricsAreNotOnThePublicRouter(t *testing.T) {
+	ts := newTestServer(t)
+
+	res, err := ts.Client().Get(ts.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("get /metrics: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", res.StatusCode)
+	}
+}
+
+// Two headers, not one: huma serves its docs page with a Content-Security-Policy
+// of its own and setting that header replaces ours, so X-Frame-Options is the
+// only framing protection /docs keeps.
+func TestFramingIsDenied(t *testing.T) {
+	ts := newTestServer(t)
+
+	for _, path := range []string{"/healthz", "/docs"} {
+		t.Run(path, func(t *testing.T) {
+			res, err := ts.Client().Get(ts.URL + path)
+			if err != nil {
+				t.Fatalf("get %s: %v", path, err)
+			}
+			defer res.Body.Close()
+
+			if got := res.Header.Get("X-Frame-Options"); got != "DENY" {
+				t.Errorf("X-Frame-Options = %q, want DENY", got)
 			}
 		})
+	}
+}
+
+func TestContentSecurityPolicyDeniesFrameAncestors(t *testing.T) {
+	ts := newTestServer(t)
+
+	res, err := ts.Client().Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("get /healthz: %v", err)
+	}
+	defer res.Body.Close()
+
+	got := res.Header.Get("Content-Security-Policy")
+	if !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want frame-ancestors 'none'", got)
 	}
 }
 

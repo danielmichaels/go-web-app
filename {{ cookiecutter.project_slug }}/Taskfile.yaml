@@ -173,16 +173,10 @@ vars:
       - goose -dir ./assets/migrations {{.DB_TYPE}} "{{.GOOSE_DSN}}" status
 
   audit:
-    desc: Run linters and betteralign
+    desc: Run linters and formatters
     cmds:
-      - task: betteralign
       - task: golines
       - task: golangci
-
-  betteralign:
-    desc: Run betteralign
-    cmds:
-      - betteralign -apply ./... {{.CLI_ARGS}}
 
   golangci:
     desc: Run golangci-lint
@@ -212,7 +206,6 @@ vars:
       - go install github.com/air-verse/air@latest
       - go install github.com/go-task/task/v3/cmd/task@latest
       - go install github.com/segmentio/golines@latest
-      - go install github.com/dkorunic/betteralign/cmd/betteralign@latest
       - go install mvdan.cc/gofumpt@latest
       - go install github.com/danielgtaylor/restish@latest
 {% endraw %}{% if cookiecutter.use_tailwind and not cookiecutter.api_only %}      # tailwindcss is a standalone binary, not a Go tool:

@@ -15,7 +15,7 @@ is the context every other decision is judged against._
 ```shell
 task dev     # hot-reload server{% if cookiecutter.database_choice == 'postgres' %}; starts its own Postgres{% endif %}
 task test    # no database required
-task audit   # lint, align, format
+task audit   # lint, format
 ```
 
 Do **not** build a binary to check your work — `task dev` is already running
@@ -54,7 +54,10 @@ file: it is generated and gitignored.
 ## Conventions
 
 - **Configuration** is environment-only, decoded once in `config.Load`. Add a
-  field with an `env:` tag; never read `os.Getenv` from application code.
+  field with an `env:` tag; never read `os.Getenv` from application code. A
+  setting that nothing reads is worse than a missing one — it claims a
+  behaviour the code does not have — so add the reader in the same change, and
+  validate the value in `Load` where the problem joins all the others.
 - **Errors** use `errors.Is`/`errors.As`, never `err ==`. Wrap with a package
   prefix: `fmt.Errorf("boards: create: %w", err)`.
 - **Logging** is `slog`. A record logged with a request context carries

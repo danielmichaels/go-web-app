@@ -4,12 +4,14 @@ import (
 {% if not cookiecutter.api_only -%}
 	"io/fs"
 {% endif -%}
+	"fmt"
 	"net/http"
 
 {% if not cookiecutter.api_only -%}
 	"{{ cookiecutter.go_module_path.strip() }}/assets"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/ui"
 {% endif -%}
+	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
 	"{{ cookiecutter.go_module_path.strip() }}/internal/version"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -31,12 +33,7 @@ import (
 func (app *App) Routes() http.Handler {
 	router := chi.NewMux()
 	router.Use(middleware.RequestID)
-	// The template cannot know which reverse proxies a generated deployment
-	// trusts. Never infer a client IP from forwarded headers by default: those
-	// headers are client-controlled when the app is directly reachable. A
-	// deployment behind a proxy must replace this with a specifically trusted
-	// ClientIPFromHeader or ClientIPFromXFF configuration.
-	router.Use(middleware.ClientIPFromRemoteAddr)
+	router.Use(app.clientIPMiddleware())
 	// Recoverer sits outside the access log purely as a backstop for httplog
 	// itself: httplog recovers handler panics first and logs them with the
 	// request and a stack trace, which Recoverer alone cannot do.
@@ -45,7 +42,6 @@ func (app *App) Routes() http.Handler {
 	router.Use(middleware.Compress(5))
 	router.Use(securityHeaders)
 	router.Use(app.Metrics.Middleware)
-	router.Handle("/metrics", app.Metrics.Handler())
 
 {% if not cookiecutter.api_only -%}
 	staticFS, err := fs.Sub(assets.EmbeddedFiles, "static")
@@ -142,17 +138,74 @@ func (app *App) humaConfig() huma.Config {
 	return cfg
 }
 
+// clientIPMiddleware resolves the caller's address the way CLIENT_IP_SOURCE
+// asks. Nothing is inferred from forwarded headers unless a deployment names
+// the hop it trusts: those headers are client-controlled whenever this process
+// is directly reachable, and the default records only the peer that actually
+// opened the connection.
+//
+// Neither panic can fire from configuration -- Load parses the same value
+// through the same function -- so either one means a mode was added there and
+// not here, which is worth a boot failure rather than silently downgrading to
+// the peer address.
+func (app *App) clientIPMiddleware() func(http.Handler) http.Handler {
+	source, err := config.ParseClientIPSource(app.Conf.Server.ClientIPSource)
+	if err != nil {
+		panic(fmt.Sprintf("server: %v", err))
+	}
+	switch source.Mode {
+	case config.ClientIPRemote:
+		return middleware.ClientIPFromRemoteAddr
+	case config.ClientIPHeader:
+		return middleware.ClientIPFromHeader(source.Header)
+	case config.ClientIPXFF:
+		return middleware.ClientIPFromXFF(source.Prefixes...)
+	default:
+		panic(fmt.Sprintf("server: CLIENT_IP_SOURCE mode %q has no middleware", source.Mode))
+	}
+}
+
 // securityHeaders: no-referrer keeps token-bearing URLs out of the Referer
 // header on any outbound navigation.
+//
+// Framing is refused twice over. huma serves its docs page with a
+// Content-Security-Policy of its own, and setting a header replaces rather
+// than appends, so the policy below is gone by the time /docs is written --
+// X-Frame-Options is what still covers that page.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+{% if not cookiecutter.api_only -%}
+		// A fuller policy is left to the application that grows here, because
+		// the useful one is not the obvious one: Datastar compiles every
+		// data-* expression with the Function constructor, which CSP counts as
+		// eval. Under a bare script-src 'self' the page still renders and then
+		// silently ignores every interaction.
+		//
+		//	default-src 'self'; script-src 'self' 'unsafe-eval';
+		//	style-src 'self' 'unsafe-inline'; frame-ancestors 'none'
+		//
+		// style-src covers the stylesheet inlined in layout.templ.
+{% endif -%}
 		next.ServeHTTP(w, r)
 	})
 }
 
 func (app *App) registerEndpoints(api huma.API) {
+	// Everything here is public. To protect an operation, name the scheme and
+	// attach the middleware; X_API_KEY then has to be set or it refuses every
+	// caller:
+	//
+	//	huma.Register(api, huma.Operation{
+	//		...
+	//		Security: []map[string][]string{
+	//			{"xApiKey": {}},
+	//		},
+	//		Middlewares: huma.Middlewares{app.ApiKeyAuth(api)},
+	//	}, app.handleThing)
 	huma.Register(api, huma.Operation{
 		OperationID:   "healthz",
 		Method:        http.MethodGet,

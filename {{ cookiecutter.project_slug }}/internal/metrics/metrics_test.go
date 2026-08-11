@@ -10,6 +10,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+func TestHandlerExposesRuntimeMetrics(t *testing.T) {
+	m := New()
+
+	res := httptest.NewRecorder()
+	m.Handler().ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if !strings.Contains(res.Body.String(), "go_goroutines") {
+		t.Errorf("handler does not expose Go runtime metrics:\n%s", res.Body.String())
+	}
+}
+
 func TestMiddlewareUsesRoutePatterns(t *testing.T) {
 	m := New()
 	h := m.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

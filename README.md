@@ -25,6 +25,7 @@ instance is skipped entirely.
 | Migrations | [goose](https://github.com/pressly/goose) (applied in-process at boot) |
 | Query gen | [sqlc](https://sqlc.dev) |
 | Jobs | [River](https://riverqueue.com) |
+| Metrics | [prometheus/client_golang](https://github.com/prometheus/client_golang), on a listener of its own |
 | Hot reload | [air](https://github.com/air-verse/air) |
 | Task runner | [task](https://taskfile.dev) |
 
@@ -141,7 +142,7 @@ CSRF uses the standard library's `http.NewCrossOriginProtection` (Go 1.25+),
 which works from `Sec-Fetch-Site`/`Origin` rather than a synchronised token, so
 forms need no hidden field. Rejected requests are answered **404, not 403**, so
 a probe cannot use the status code to confirm a route exists. Cross-origin
-callers must be listed in `TRUSTED_ORIGINS`.
+callers must be listed in `TRUSTED_ORIGINS`, comma separated.
 
 ---
 
@@ -149,11 +150,13 @@ callers must be listed in `TRUSTED_ORIGINS`.
 
 | Value | What you get |
 |---|---|
-| `github` | `.github/workflows/ci.yml` — check → test (with the Postgres download cached) → native amd64 + arm64 image builds, no QEMU → manifest merge. |
+| `github` | `.github/workflows/ci.yml` — check → lint → test (with the Postgres download cached) → native amd64 + arm64 image builds, no QEMU → manifest merge. |
 | `woodpecker` | `.woodpecker.yml` — build, lint, test, buildx to ghcr.io, plus an optional Dokploy deploy webhook. |
 | `none` | No CI files. |
 
-Both stamp the version into the binary via `-ldflags -X`.
+Both stamp the version into the binary via `-ldflags -X`, and both run
+`golangci-lint` pinned to the same release, so neither can go green on code the
+other rejects.
 
 > [!NOTE]
 > The Woodpecker test step runs as a non-root user on a Debian image. Neither
@@ -236,11 +239,27 @@ A common pattern is both together: NATS for real-time events, River for durable 
 
 ---
 
+## Security defaults
+
+Every one of these is changeable; they are the starting position, and the
+reasoning is worth knowing before overriding it.
+
+| Default | Why |
+|---|---|
+| No in-process rate limiting | Behind a reverse proxy this binary sees the proxy's address, so an IP-keyed limiter here files every visitor into one bucket and lets the first busy client lock out the rest. Configure it at the edge, which knows the real caller. |
+| `X_API_KEY` optional, `ApiKeyAuth` attached to nothing | A UI-only project has no endpoint worth guarding, and a mandatory secret protecting nothing only teaches operators to paste junk into config. Attach the middleware when you have something to protect; it fails closed if the key is missing by then. |
+| `/metrics` on `METRICS_PORT`, never `SERVER_PORT` | It reports process statistics and enumerates every route the app answers. The Dockerfile exposes `SERVER_PORT` alone, so metrics stay reachable only from wherever the container is attached. |
+| `CLIENT_IP_SOURCE=remote` | Nothing is read from forwarded headers until a deployment names the hop it trusts, because those headers are caller-controlled whenever the process is directly reachable. Behind a proxy, set `header:` or `xff:` or every access log line records the proxy. |
+| `X-Frame-Options: DENY` and `frame-ancestors 'none'`, but no fuller CSP | Datastar compiles its `data-*` expressions with the `Function` constructor, which CSP counts as eval, so any `script-src` has to permit `'unsafe-eval'`. A policy that looks stricter than it is helps nobody; `securityHeaders` carries a working starting point in a comment. |
+| CSRF rejects with 404, not 403 | A probe cannot use the status code to confirm that a route exists. |
+
 ## Environment variables
 
 All config is via environment variables, decoded once by `config.Load`, which
-reports **every** problem at once rather than one per restart. See `.env.example`
-in the generated project for the full list.
+reports **every** problem at once rather than one per restart, and refuses to
+start on any of them. See `.env.example` in the generated project for the full
+list — everything documented there has a reader in `internal/config`, and
+nothing there describes a protection that does not exist.
 
 ---
 
@@ -250,7 +269,7 @@ in the generated project for the full list.
 task dev                                  # hot-reload server, embedded database
 task test                                 # tests, no database required
 task db:migration:create -- my-migration  # new migration file
-task audit                                # lint + align + format
+task audit                                # lint + format
 task sqlc                                 # regenerate query code
 task templ                                # regenerate templates
 task clean:pg                             # reclaim embedded-Postgres leftovers

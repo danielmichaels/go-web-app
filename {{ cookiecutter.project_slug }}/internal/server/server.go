@@ -90,12 +90,14 @@ func newSessionManager(d Deps) *scs.SessionManager {
 // newCrossOriginProtection builds the stdlib CSRF check. A rejected request is
 // answered with 404 rather than 403 so a probe cannot use the status code to
 // confirm that a resource exists.
+//
+// The panic cannot fire from configuration: Load builds this from the same
+// list through the same function, so reaching it means the two have drifted
+// apart.
 func newCrossOriginProtection(cfg *config.Conf) *http.CrossOriginProtection {
-	p := http.NewCrossOriginProtection()
-	for _, origin := range cfg.AppConf.TrustedOrigins {
-		if err := p.AddTrustedOrigin(origin); err != nil {
-			panic(fmt.Sprintf("server: invalid TRUSTED_ORIGINS entry %q: %v", origin, err))
-		}
+	p, problems := config.NewCrossOriginProtection(cfg.AppConf.TrustedOrigins)
+	if len(problems) > 0 {
+		panic(fmt.Sprintf("server: %v", problems))
 	}
 	p.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -120,29 +122,44 @@ func (app *App) Stop(ctx context.Context) error {
 {% endif -%}
 }
 
-// Serve runs the HTTP server until a signal arrives or a goroutine fails,
-// then drains in-flight requests within shutdownGrace.
-func (app *App) Serve(ctx context.Context) error {
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", app.Conf.Server.Port),
-		Handler:      app.Routes(),
+// newHTTPServer builds a listener on port carrying the configured timeouts.
+func (app *App) newHTTPServer(port int, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      h,
 		IdleTimeout:  app.Conf.Server.TimeoutIdle,
 		ReadTimeout:  app.Conf.Server.TimeoutRead,
 		WriteTimeout: app.Conf.Server.TimeoutWrite,
 	}
+}
+
+// listen serves srv until it is shut down. ErrServerClosed is what Shutdown
+// leaves behind, not a failure.
+func (app *App) listen(name string, srv *http.Server) func() error {
+	return func() error {
+		app.Log.Info(name+" listening", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
+}
+
+// Serve runs the HTTP server until a signal arrives or a goroutine fails,
+// then drains in-flight requests within shutdownGrace.
+func (app *App) Serve(ctx context.Context) error {
+	srv := app.newHTTPServer(app.Conf.Server.Port, app.Routes())
+	// A listener of its own, on a port nothing publishes: process statistics
+	// and the route table are worth handing an operator and no one else.
+	metricsSrv := app.newHTTPServer(app.Conf.Server.MetricsPort, app.Metrics.Handler())
 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
-		app.Log.Info("HTTP server listening", "port", app.Conf.Server.Port)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
-	})
+	g.Go(app.listen("HTTP server", srv))
+	g.Go(app.listen("metrics server", metricsSrv))
 
 	g.Go(func() error {
 		<-gctx.Done()
@@ -152,7 +169,21 @@ func (app *App) Serve(ctx context.Context) error {
 		// requests this grace period exists to drain.
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
 		defer cancel()
-		return srv.Shutdown(shutdownCtx)
+
+		// Together, not in turn: Shutdown blocks until its own listener has
+		// drained, so a metrics scrape that hangs would otherwise spend the
+		// grace period that in-flight requests exist to use.
+		var draining errgroup.Group
+		draining.Go(func() error {
+			// Scrapes are short, so the metrics listener has nothing to drain
+			// and its failure to close is not worth failing the shutdown over.
+			if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+				app.Log.Error("metrics server shutdown", "error", err)
+			}
+			return nil
+		})
+		draining.Go(func() error { return srv.Shutdown(shutdownCtx) })
+		return draining.Wait()
 	})
 
 	// A signal is the ordinary way to stop, so its cancellation is not an error.

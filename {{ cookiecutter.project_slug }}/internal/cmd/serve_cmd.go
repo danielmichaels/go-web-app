@@ -51,6 +51,10 @@ func (s *ServeCmd) Run() error {
 	if err := exampleSubscriber.Subscribe(app.Ctx); err != nil {
 		return fmt.Errorf("subscribe to example messages: %w", err)
 	}
+	// The process is on its way out and the connection close above tears the
+	// subscription down regardless, so a failed unsubscribe has nothing left
+	// to act on.
+	//nolint:errcheck
 	defer exampleSubscriber.Unsubscribe()
 
 	deps.Nats = natsConn
