@@ -41,6 +41,28 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
 
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Generate templ
+        run: |
+          if ls internal/ui/templates/*.templ >/dev/null 2>&1; then
+            go tool templ generate
+          fi
+
+      # Pinned to the release .woodpecker.yml runs, so the two CI choices
+      # cannot disagree about whether this code passes.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          args: ./... --config=.golangci.yml
+
   test:
     runs-on: ubuntu-24.04
     steps:
@@ -76,7 +98,7 @@ jobs:
           fi
 
   image:
-    needs: [check, test]
+    needs: [check, lint, test]
     if: github.event_name == 'push'
     permissions:
       contents: read
