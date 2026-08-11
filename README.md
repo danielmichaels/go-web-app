@@ -270,7 +270,7 @@ nothing there describes a protection that does not exist.
 task dev                                  # hot-reload server, embedded database
 task test                                 # tests, no database required
 task db:migration:create -- my-migration  # new migration file
-task audit                                # lint + align + format
+task audit                                # lint + format
 task sqlc                                 # regenerate query code
 task templ                                # regenerate templates
 task clean:pg                             # reclaim embedded-Postgres leftovers

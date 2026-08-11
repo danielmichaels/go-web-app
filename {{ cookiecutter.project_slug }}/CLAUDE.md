@@ -15,7 +15,7 @@ is the context every other decision is judged against._
 ```shell
 task dev     # hot-reload server{% if cookiecutter.database_choice == 'postgres' %}; starts its own Postgres{% endif %}
 task test    # no database required
-task audit   # lint, align, format
+task audit   # lint, format
 ```
 
 Do **not** build a binary to check your work — `task dev` is already running
