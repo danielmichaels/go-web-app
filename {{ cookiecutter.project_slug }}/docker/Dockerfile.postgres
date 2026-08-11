@@ -3,7 +3,7 @@
 # false-positives on Dockerfiles, silently shipping an unrendered template. So
 # nothing here is templated — the binary is always installed as /usr/bin/app,
 # and the single main package under ./cmd is found by wildcard.
-FROM golang:1.26-alpine AS builder
+FROM ghcr.io/danielmichaels/ci-toolkit:latest AS builder
 
 WORKDIR /build
 
@@ -17,15 +17,11 @@ COPY . .
 # Both generators are guarded rather than templated: the files they consume
 # only exist for some generated configurations.
 RUN if [ -f ./assets/css/input.css ]; then \
-      apk add --no-cache curl && \
-      curl -fsSL -o /usr/local/bin/tailwindcss \
-        "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.11/tailwindcss-linux-x64-musl" && \
-      chmod 755 /usr/local/bin/tailwindcss && \
       tailwindcss -i ./assets/css/input.css -o ./assets/static/css/main.css --minify; \
     fi
 
 # templ output is generated, never committed, so it must be produced here too.
-RUN if ls ./internal/ui/templates/*.templ >/dev/null 2>&1; then go tool templ generate; fi
+RUN if ls ./internal/ui/templates/*.templ >/dev/null 2>&1; then templ generate; fi
 
 # Injected by CI; the fallbacks keep a bare `docker build` working.
 ARG VERSION=dev
