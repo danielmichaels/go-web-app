@@ -168,7 +168,6 @@ missing resource still warns.
 | Path | What |
 |---|---|
 | `/healthz`, `/version` | Monitoring, also in the OpenAPI spec |
-| `/metrics` | Prometheus runtime, process, and HTTP metrics |
 | `/docs`, `/openapi.json` | API reference |
 | `/app` | The rendered UI |
 | `/app/welcome` | First-run tour of what was scaffolded — delete when it has served its purpose |
@@ -180,16 +179,58 @@ missing resource still warns.
 Pages are [templ](https://templ.guide) templates updated in place by
 [Datastar](https://data-star.dev). Cross-origin writes are rejected by
 `http.CrossOriginProtection`; list any legitimate cross-origin callers in
-`TRUSTED_ORIGINS`.
+`TRUSTED_ORIGINS`, separated with `;` rather than `,`.
 {% else %}
 ## HTTP surface
 
 | Path | What |
 |---|---|
 | `/healthz`, `/version` | Monitoring |
-| `/metrics` | Prometheus runtime, process, and HTTP metrics |
 | `/docs`, `/openapi.json` | API reference |
 {% endif %}
+## Security headers
+
+Every response carries `Referrer-Policy: no-referrer`, `X-Content-Type-Options:
+nosniff`, `X-Frame-Options: DENY` and `Content-Security-Policy:
+frame-ancestors 'none'`. There is no fuller CSP by default{% if not cookiecutter.api_only %}: Datastar
+evaluates its `data-*` expressions through the `Function` constructor, so any
+`script-src` has to permit `'unsafe-eval'`, and a policy that looks stricter
+than it is helps nobody. `securityHeaders` in `internal/server/routes.go`
+carries a working starting point in a comment{% endif %}.
+
+## API authentication
+
+`ApiKeyAuth` compares an `X-API-Key` header against `X_API_KEY` and is attached
+to nothing: a freshly generated project has no endpoint worth guarding. The
+scheme is declared in the OpenAPI document so it is ready to reference, and
+`registerEndpoints` in `internal/server/routes.go` shows where the gate goes.
+Until then no key is required, in production or anywhere else.
+
+## Metrics
+
+Prometheus runtime, process and HTTP metrics are served at `/metrics` on
+`METRICS_PORT`, not on `SERVER_PORT`. They sit on a separate listener because
+they describe the process and enumerate every route it answers, which is worth
+handing an operator and nobody else. The Dockerfile exposes `SERVER_PORT`
+alone, so the metrics port is reachable only from wherever the container is
+attached.
+
+## Client addresses
+
+`CLIENT_IP_SOURCE` decides what the access log and anything else calling
+`middleware.GetClientIP` treats as the caller: `remote` for a process reachable
+directly, `header:X-Real-IP` for a proxy that overwrites that header on every
+request, or `xff:<cidr>[,<cidr>...]` naming the proxy hops to walk past. Leaving
+it on `remote` behind a proxy records the proxy on every line.
+
+## Rate limiting
+
+Not done in this process. Behind a reverse proxy the binary sees the proxy's
+address rather than the caller's, so an IP-keyed limiter here would file every
+visitor into one bucket and let the first busy client lock out the rest.
+Configure it at the edge instead -- Traefik, Caddy and nginx all limit on the
+address they terminate.
+
 ## Container
 
 ```shell

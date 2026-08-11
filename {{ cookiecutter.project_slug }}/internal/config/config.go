@@ -1,8 +1,12 @@
 package config
 
 import (
+{% if not cookiecutter.api_only -%}
+	"net/http"
+{% endif -%}
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -16,7 +20,6 @@ const EnvProduction = "production"
 type Conf struct {
 	Server  serverConf
 	Db      dbConf
-	Limiter limiter
 	AppConf appConf
 {% if not cookiecutter.api_only -%}
 	Session sessionConf
@@ -24,12 +27,6 @@ type Conf struct {
 {% if cookiecutter.use_nats -%}
 	Nats natsConf
 {% endif -%}
-}
-
-type limiter struct {
-	Enabled bool          `env:"RATE_LIMIT_ENABLED,default=true"`
-	Rps     int           `env:"RATE_LIMIT_RPS,default=10"`
-	BackOff time.Duration `env:"RATE_LIMIT_BACKOFF,default=20s"`
 }
 
 {% if cookiecutter.use_nats -%}
@@ -67,9 +64,19 @@ type dbConf struct {
 type serverConf struct {
 	XApiKey      string        `env:"X_API_KEY,default="`
 	Port         int           `env:"SERVER_PORT,default=9898"`
+	// MetricsPort carries /metrics on a listener of its own so the interface
+	// serving it can be kept off the public network. Nothing publishes it:
+	// the Dockerfile exposes SERVER_PORT alone.
+	MetricsPort  int           `env:"METRICS_PORT,default=9899"`
 	TimeoutRead  time.Duration `env:"SERVER_TIMEOUT_READ,default=5s"`
 	TimeoutWrite time.Duration `env:"SERVER_TIMEOUT_WRITE,default=10s"`
 	TimeoutIdle  time.Duration `env:"SERVER_TIMEOUT_IDLE,default=15s"`
+	// ClientIPSource decides where a caller's address is read from: remote,
+	// header:<Name>, or xff:<cidr>[,<cidr>...]. It has to match the
+	// deployment. A header is only as trustworthy as the proxy that
+	// overwrites it on every request, and remote behind any proxy yields the
+	// proxy's own address rather than the caller's.
+	ClientIPSource string `env:"CLIENT_IP_SOURCE,default=remote"`
 }
 
 {% if not cookiecutter.api_only -%}
@@ -123,7 +130,7 @@ func ShouldStartEmbedded(c *Conf) bool {
 // mountedPrefixes are the paths Routes already owns. chi panics when two
 // mounts overlap, so an unlucky RIVER_UI_PATH would take the whole process
 // down at boot rather than 404 on one route.
-var mountedPrefixes = []string{"/app", "/static", "/docs", "/healthz", "/version", "/metrics", "/openapi.json"}
+var mountedPrefixes = []string{"/app", "/static", "/docs", "/healthz", "/version", "/openapi.json"}
 
 // riverUIPathProblem returns the empty string when the path is usable.
 func riverUIPathProblem(path string) string {
@@ -144,6 +151,40 @@ func riverUIPathProblem(path string) string {
 }
 
 {% endif -%}
+// clientIPSourceProblem returns the empty string when the source is usable.
+//
+// Prefixes are parsed here rather than left to chi, whose XFF middleware
+// builds them with netip.MustParsePrefix and would take the process down at
+// boot instead of reporting the typo.
+func clientIPSourceProblem(source string) string {
+	mode, arg, _ := strings.Cut(source, ":")
+	switch mode {
+	case "remote":
+		if arg != "" {
+			return "CLIENT_IP_SOURCE=remote takes no argument"
+		}
+	case "header":
+		if arg == "" {
+			return "CLIENT_IP_SOURCE=header needs a header name, e.g. header:X-Real-IP"
+		}
+	case "xff":
+		if arg == "" {
+			return "CLIENT_IP_SOURCE=xff needs at least one trusted CIDR, e.g. xff:10.0.0.0/8"
+		}
+		for _, cidr := range strings.Split(arg, ",") {
+			if _, err := netip.ParsePrefix(strings.TrimSpace(cidr)); err != nil {
+				return fmt.Sprintf("CLIENT_IP_SOURCE has an unparseable CIDR %q", cidr)
+			}
+		}
+	default:
+		return fmt.Sprintf(
+			"CLIENT_IP_SOURCE %q must be remote, header:<Name>, or xff:<cidr>[,<cidr>...]",
+			source,
+		)
+	}
+	return ""
+}
+
 // Load reads configuration from the environment.
 //
 // Every problem is reported at once rather than one per restart: a
@@ -171,6 +212,18 @@ func Load() (*Conf, error) {
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		problems = append(problems, "SERVER_PORT must be between 1 and 65535")
 	}
+	if problem := clientIPSourceProblem(c.Server.ClientIPSource); problem != "" {
+		problems = append(problems, problem)
+	}
+	if c.Server.MetricsPort < 1 || c.Server.MetricsPort > 65535 {
+		problems = append(problems, "METRICS_PORT must be between 1 and 65535")
+	}
+	if c.Server.MetricsPort == c.Server.Port {
+		problems = append(
+			problems,
+			"METRICS_PORT must differ from SERVER_PORT; both listeners cannot share one port",
+		)
+	}
 {% if cookiecutter.use_river and not cookiecutter.api_only -%}
 	if c.AppConf.RiverUIEnabled {
 		if problem := riverUIPathProblem(c.AppConf.RiverUIPath); problem != "" {
@@ -179,10 +232,25 @@ func Load() (*Conf, error) {
 	}
 {% endif -%}
 
-	if c.IsProduction() {
-		if c.Server.XApiKey == "" {
-			problems = append(problems, "X_API_KEY must be set in production")
+{% if not cookiecutter.api_only -%}
+	// Checked here rather than where CrossOriginProtection is built, so a typo
+	// is reported beside every other problem instead of ending the process
+	// with a stack trace before anything has started.
+	csrf := http.NewCrossOriginProtection()
+	for _, origin := range c.AppConf.TrustedOrigins {
+		if err := csrf.AddTrustedOrigin(origin); err != nil {
+			problems = append(problems, fmt.Sprintf("TRUSTED_ORIGINS: %v", err))
+			if strings.Contains(origin, ",") {
+				problems = append(
+					problems,
+					"TRUSTED_ORIGINS separates entries with ';', not ','",
+				)
+			}
 		}
+	}
+{% endif -%}
+
+	if c.IsProduction() {
 {% if cookiecutter.database_choice == 'postgres' -%}
 		if c.Db.Embedded {
 			problems = append(

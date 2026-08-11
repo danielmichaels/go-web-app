@@ -90,6 +90,10 @@ func newSessionManager(d Deps) *scs.SessionManager {
 // newCrossOriginProtection builds the stdlib CSRF check. A rejected request is
 // answered with 404 rather than 403 so a probe cannot use the status code to
 // confirm that a resource exists.
+//
+// The panic below cannot fire from configuration: Load has already rejected
+// every origin this would refuse, so reaching it means the two have drifted
+// apart.
 func newCrossOriginProtection(cfg *config.Conf) *http.CrossOriginProtection {
 	p := http.NewCrossOriginProtection()
 	for _, origin := range cfg.AppConf.TrustedOrigins {
@@ -131,6 +135,16 @@ func (app *App) Serve(ctx context.Context) error {
 		WriteTimeout: app.Conf.Server.TimeoutWrite,
 	}
 
+	// A listener of its own, on a port nothing publishes: process statistics
+	// and the route table are worth handing an operator and no one else.
+	metricsSrv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", app.Conf.Server.MetricsPort),
+		Handler:      app.Metrics.Handler(),
+		IdleTimeout:  app.Conf.Server.TimeoutIdle,
+		ReadTimeout:  app.Conf.Server.TimeoutRead,
+		WriteTimeout: app.Conf.Server.TimeoutWrite,
+	}
+
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -145,6 +159,14 @@ func (app *App) Serve(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
+		app.Log.Info("metrics server listening", "port", app.Conf.Server.MetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	})
+
+	g.Go(func() error {
 		<-gctx.Done()
 		app.Log.Warn("shutting down", "addr", srv.Addr)
 		// WithoutCancel: gctx is already done by the time we get here, so a
@@ -152,6 +174,11 @@ func (app *App) Serve(ctx context.Context) error {
 		// requests this grace period exists to drain.
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
 		defer cancel()
+		// Scrapes are short, so the metrics listener has nothing to drain and
+		// its failure to close is not worth failing the shutdown over.
+		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+			app.Log.Error("metrics server shutdown", "error", err)
+		}
 		return srv.Shutdown(shutdownCtx)
 	})
 

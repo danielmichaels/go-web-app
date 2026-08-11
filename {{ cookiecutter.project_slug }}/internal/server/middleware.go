@@ -4,6 +4,7 @@ import (
 {% if cookiecutter.use_river and not cookiecutter.api_only -%}
 	"strings"
 {% endif -%}
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 
@@ -21,7 +22,14 @@ func (app *App) ApiKeyAuth(api huma.API) func(ctx huma.Context, next func(huma.C
 		// Fail closed when the operator has not configured a key. Comparing an
 		// empty header with an empty configured value would otherwise authorize
 		// every request that omitted X-API-Key.
-		if app.Conf.Server.XApiKey == "" || ctx.Header("X-API-Key") != app.Conf.Server.XApiKey {
+		key := app.Conf.Server.XApiKey
+		if key == "" {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		// Constant time: how long a rejection takes must not tell the caller
+		// how much of the key they guessed correctly.
+		if subtle.ConstantTimeCompare([]byte(ctx.Header("X-API-Key")), []byte(key)) != 1 {
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -67,7 +75,7 @@ func (app *App) httplogOptions() *httplog.Options {
 func (app *App) skipRequestLog(r *http.Request, _ int) bool {
 	route := chi.RouteContext(r.Context()).RoutePattern()
 	switch route {
-	case "/static/*", "/healthz", "/metrics":
+	case "/static/*", "/healthz":
 		return true
 	}
 {% if cookiecutter.use_river and not cookiecutter.api_only -%}

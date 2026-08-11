@@ -51,6 +51,8 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder ["/out/app", "/usr/bin/app"]
 
 ENV DOCKER=1
+# SERVER_PORT only. METRICS_PORT is deliberately absent: nothing in front of
+# it authorises anything, so it stays reachable only on the container network.
 EXPOSE 9898
 
 # A distroless image has no curl or shell, so the binary probes itself.
