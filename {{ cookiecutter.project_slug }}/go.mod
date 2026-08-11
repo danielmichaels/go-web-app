@@ -8,10 +8,12 @@ require (
 	github.com/SladkyCitron/slogcolor v1.9.0
 	github.com/alecthomas/kong v1.16.0
 	github.com/danielgtaylor/huma/v2 v2.39.1
+	github.com/felixge/httpsnoop v1.0.4
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httplog/v3 v3.4.0
 	github.com/joeshaw/envdecode v0.0.0-20200121155833-099f1fc765bd
 	github.com/pressly/goose/v3 v3.27.3
+	github.com/prometheus/client_golang v1.23.1
 	golang.org/x/sync v0.22.0
 {%- if cookiecutter.database_choice == 'postgres' %}
 	github.com/fergusstrange/embedded-postgres v1.34.0

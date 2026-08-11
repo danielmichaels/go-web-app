@@ -155,7 +155,7 @@ deep in a service call ties back to the request that caused it.
 
 Access logs are [httplog][httplog]'s and take their level from the response
 status: 5xx error, 4xx warn, everything else info.
-Health checks{% if not cookiecutter.api_only %} and static assets{% endif %} are not logged at all, and a 404
+Health checks, metrics{% if not cookiecutter.api_only %} and static assets{% endif %} are not logged at all, and a 404
 for a route that never matched is logged at info rather than warn, so bot
 probing does not turn the dashboard yellow. A handler returning 404 for a
 missing resource still warns.
@@ -168,6 +168,7 @@ missing resource still warns.
 | Path | What |
 |---|---|
 | `/healthz`, `/version` | Monitoring, also in the OpenAPI spec |
+| `/metrics` | Prometheus runtime, process, and HTTP metrics |
 | `/docs`, `/openapi.json` | API reference |
 | `/app` | The rendered UI |
 | `/app/welcome` | First-run tour of what was scaffolded — delete when it has served its purpose |
@@ -186,6 +187,7 @@ Pages are [templ](https://templ.guide) templates updated in place by
 | Path | What |
 |---|---|
 | `/healthz`, `/version` | Monitoring |
+| `/metrics` | Prometheus runtime, process, and HTTP metrics |
 | `/docs`, `/openapi.json` | API reference |
 {% endif %}
 ## Container

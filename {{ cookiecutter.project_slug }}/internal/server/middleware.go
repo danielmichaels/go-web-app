@@ -67,7 +67,7 @@ func (app *App) httplogOptions() *httplog.Options {
 func (app *App) skipRequestLog(r *http.Request, _ int) bool {
 	route := chi.RouteContext(r.Context()).RoutePattern()
 	switch route {
-	case "/static/*", "/healthz":
+	case "/static/*", "/healthz", "/metrics":
 		return true
 	}
 {% if cookiecutter.use_river and not cookiecutter.api_only -%}

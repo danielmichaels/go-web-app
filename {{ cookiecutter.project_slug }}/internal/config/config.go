@@ -123,7 +123,7 @@ func ShouldStartEmbedded(c *Conf) bool {
 // mountedPrefixes are the paths Routes already owns. chi panics when two
 // mounts overlap, so an unlucky RIVER_UI_PATH would take the whole process
 // down at boot rather than 404 on one route.
-var mountedPrefixes = []string{"/app", "/static", "/docs", "/healthz", "/version", "/openapi.json"}
+var mountedPrefixes = []string{"/app", "/static", "/docs", "/healthz", "/version", "/metrics", "/openapi.json"}
 
 // riverUIPathProblem returns the empty string when the path is usable.
 func riverUIPathProblem(path string) string {
