@@ -44,6 +44,8 @@ func (app *App) Routes() http.Handler {
 	router.Use(httplog.RequestLogger(app.Log, app.httplogOptions()))
 	router.Use(middleware.Compress(5))
 	router.Use(securityHeaders)
+	router.Use(app.Metrics.Middleware)
+	router.Handle("/metrics", app.Metrics.Handler())
 
 {% if not cookiecutter.api_only -%}
 	staticFS, err := fs.Sub(assets.EmbeddedFiles, "static")

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"{{ cookiecutter.go_module_path.strip() }}/internal/config"
+	"{{ cookiecutter.go_module_path.strip() }}/internal/metrics"
 {% if cookiecutter.use_river -%}
 	"{{ cookiecutter.go_module_path.strip() }}/internal/jobs"
 {% endif -%}
@@ -54,6 +55,7 @@ type Deps struct {
 
 type App struct {
 	Deps
+	Metrics *metrics.Metrics
 {% if not cookiecutter.api_only -%}
 	Sessions *scs.SessionManager
 	csrf     *http.CrossOriginProtection
@@ -61,7 +63,7 @@ type App struct {
 }
 
 func New(d Deps) *App {
-	app := &App{Deps: d}
+	app := &App{Deps: d, Metrics: metrics.New()}
 {% if not cookiecutter.api_only -%}
 	app.Sessions = newSessionManager(d)
 	app.csrf = newCrossOriginProtection(d.Conf)

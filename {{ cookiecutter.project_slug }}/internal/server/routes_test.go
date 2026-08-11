@@ -51,7 +51,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 func TestMonitoringEndpoints(t *testing.T) {
 	ts := newTestServer(t)
 
-	for _, path := range []string{"/healthz", "/version"} {
+	for _, path := range []string{"/healthz", "/version", "/metrics"} {
 		t.Run(path, func(t *testing.T) {
 			res, err := ts.Client().Get(ts.URL + path)
 			if err != nil {
@@ -60,6 +60,15 @@ func TestMonitoringEndpoints(t *testing.T) {
 			defer res.Body.Close()
 			if res.StatusCode != http.StatusOK {
 				t.Errorf("status = %d, want 200", res.StatusCode)
+			}
+			if path == "/metrics" {
+				body, err := io.ReadAll(res.Body)
+				if err != nil {
+					t.Fatalf("read %s: %v", path, err)
+				}
+				if !strings.Contains(string(body), "go_goroutines") {
+					t.Error("/metrics does not expose Go runtime metrics")
+				}
 			}
 		})
 	}
