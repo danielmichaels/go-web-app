@@ -3,7 +3,9 @@
 # false-positives on Dockerfiles, silently shipping an unrendered template. So
 # nothing here is templated — the binary is always installed as /usr/bin/app,
 # and the single main package under ./cmd is found by wildcard.
-FROM ghcr.io/danielmichaels/ci-toolkit:latest AS builder
+# Build tools (Tailwind, templ, and the Go compiler) run natively even when
+# buildx is producing an image for another architecture.
+FROM --platform=$BUILDPLATFORM ghcr.io/danielmichaels/ci-toolkit:latest AS builder
 
 WORKDIR /build
 
@@ -27,7 +29,10 @@ RUN if ls ./internal/ui/templates/*.templ >/dev/null 2>&1; then templ generate; 
 ARG VERSION=dev
 ARG REVISION=unknown
 
-ENV CGO_ENABLED=0 GOOS=linux
+ARG TARGETARCH
+ENV CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=${TARGETARCH}
 
 # The module path comes from go.mod rather than being baked in, so the ldflags
 # stay correct if the module is ever renamed.
