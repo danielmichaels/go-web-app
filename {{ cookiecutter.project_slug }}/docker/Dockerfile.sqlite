@@ -3,7 +3,7 @@
 # false-positives on Dockerfiles, silently shipping an unrendered template. So
 # nothing here is templated — the binary is always installed as /usr/bin/app,
 # and the single main package under ./cmd is found by wildcard.
-FROM litestream/litestream:0.5.9 AS litestream
+FROM litestream/litestream:0.5.17 AS litestream
 # Build tools (Tailwind, templ, and the Go compiler) run natively even when
 # buildx is producing an image for another architecture.
 FROM --platform=$BUILDPLATFORM ghcr.io/danielmichaels/ci-toolkit:latest AS builder
