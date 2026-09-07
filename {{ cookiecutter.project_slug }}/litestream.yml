@@ -1,4 +1,16 @@
 {% raw %}
+levels:
+  - interval: "${LITESTREAM_L1_INTERVAL}"
+  - interval: "${LITESTREAM_L2_INTERVAL}"
+  - interval: "${LITESTREAM_L3_INTERVAL}"
+
+snapshot:
+  interval: "${LITESTREAM_SNAPSHOT_INTERVAL}"
+  retention: "${LITESTREAM_SNAPSHOT_RETENTION}"
+
+l0-retention: "${LITESTREAM_L0_RETENTION}"
+l0-retention-check-interval: "${LITESTREAM_L0_RETENTION_CHECK}"
+
 # LITESTREAM_LOCAL_DB_PATH must match the value in .env and the path the
 # entrypoint restores to.
 dbs:
