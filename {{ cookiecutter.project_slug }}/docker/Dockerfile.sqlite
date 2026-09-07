@@ -58,6 +58,14 @@ COPY --from=builder ["/out/app", "/usr/bin/app"]
 # needs -config passing to every invocation.
 COPY ["litestream.yml", "/etc/litestream.yml"]
 
+ENV LITESTREAM_L1_INTERVAL=5m \
+    LITESTREAM_L2_INTERVAL=1h \
+    LITESTREAM_L3_INTERVAL=24h \
+    LITESTREAM_SNAPSHOT_INTERVAL=24h \
+    LITESTREAM_SNAPSHOT_RETENTION=72h \
+    LITESTREAM_L0_RETENTION=15m \
+    LITESTREAM_L0_RETENTION_CHECK=5m
+
 ENV DOCKER=1
 # SERVER_PORT only. METRICS_PORT is deliberately absent: nothing in front of
 # it authorises anything, so it stays reachable only on the container network.
